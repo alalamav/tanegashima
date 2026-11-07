@@ -44,11 +44,13 @@ jobs:
       - name: Build
         run: npm run build
 
-      # enablement: true turns Pages on through the API on the first run, so the
-      # site does not have to be switched on by hand in the repository settings.
+      # Pages must already be switched on for this repository, with its source
+      # set to "GitHub Actions" (Settings -> Pages -> Build and deployment).
+      # configure-pages can do that itself with `enablement: true`, but only
+      # when the workflow token can administer the repository — the default
+      # GITHUB_TOKEN cannot, whatever permissions the job is granted, so the
+      # call returns 404 and the job fails before it uploads anything.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:

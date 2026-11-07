@@ -52,9 +52,15 @@ in `dist/`, deployable to GitHub Pages or Netlify — no server).
 ### Deploying
 
 `.github/workflows/deploy.yml` typechecks, tests, builds and publishes `dist/`
-to GitHub Pages on every push to `main`. It enables the Pages site itself on its
-first run, so nothing has to be switched on by hand. Vite's `base` is `./`, so
-the build works at a project-pages subpath without further configuration.
+to GitHub Pages on every push to `main`. Vite's `base` is `./`, so the build
+works at a project-pages subpath without further configuration.
+
+Pages has to be switched on once, by hand, before the first run:
+**Settings → Pages → Build and deployment → Source: GitHub Actions**. The
+`enablement: true` option of `actions/configure-pages` exists to do this from
+the workflow, but it needs a token that can administer the repository, which
+the default `GITHUB_TOKEN` is not — so it fails with a 404 on a repository
+whose Pages site does not exist yet.
 
 The built data in `public/data/` is committed, so CI never needs to reach
 `data.jma.go.jp`. Pages publishes from a private repository only on GitHub Pro,
