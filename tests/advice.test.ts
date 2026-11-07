@@ -27,8 +27,15 @@ const dataDir = resolve(import.meta.dirname, '../public/data');
 const series = JSON.parse(readFileSync(resolve(dataDir, 'series.json'), 'utf8')) as Series;
 const events = JSON.parse(readFileSync(resolve(dataDir, 'events.json'), 'utf8')) as VolcanoEvent[];
 
+/**
+ * The spiral baseline. The app opens in circle mode, which has no outer radius
+ * and no turn bracket, so the spiral cases pin their own radii; circle cases
+ * pass `clockMode: 'circle'` explicitly.
+ */
+const SPIRAL: Partial<Params> = { clockMode: 'synodic', r0: 30, r1: 140 };
+
 const build = (patch: Partial<Params> = {}) => {
-  const params: Params = { ...DEFAULT_PARAMS, ...patch };
+  const params: Params = { ...DEFAULT_PARAMS, ...SPIRAL, ...patch };
   const wall = buildWall(series, events, params);
   const { checks, measures } = runChecks(wall, params);
   const guidance = turnGuidance(params, measures.turns, measures.windowHours);
@@ -78,9 +85,9 @@ describe('turn guidance', () => {
   });
 
   it('explains why spring–neap fails at the default radii', () => {
-    const { guidance, measures } = build({ clockMode: 'springNeap' });
+    const { guidance, measures, params } = build({ clockMode: 'springNeap' });
     expect(measures.turns).toBeGreaterThan(guidance.maxTurns);
-    expect(guidance.suggestedR1Mm).toBeGreaterThan(DEFAULT_PARAMS.r1);
+    expect(guidance.suggestedR1Mm).toBeGreaterThan(params.r1);
   });
 });
 
@@ -102,7 +109,8 @@ describe('every check explains itself', () => {
       { r1: 400 },
       { k: 1 },
       { clockMode: 'linear' as const, linearTurns: 0.5 },
-      SHORT_WINDOW_PRESET,
+      { ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 },
+      { ...DEFAULT_PARAMS },
     ]) {
       for (const check of build(patch).checks) {
         if (check.level === 'ok') {
@@ -175,8 +183,8 @@ describe('the advice actually fixes the check', () => {
     const after = build({
       clockMode: 'linear',
       linearTurns: 0.5,
-      r0: DEFAULT_PARAMS.r0 * scale,
-      r1: DEFAULT_PARAMS.r1 * scale,
+      r0: before.params.r0 * scale,
+      r1: before.params.r1 * scale,
     });
     expect(after.level('tideWavelength')).not.toBe('fail');
   });
@@ -203,24 +211,32 @@ describe('the advice actually fixes the check', () => {
     const scale = radiusScaleForLength(before.measures.centerlineLengthMm, 1200);
     const after = build({
       clockMode: 'springNeap',
-      r0: DEFAULT_PARAMS.r0 * scale,
-      r1: DEFAULT_PARAMS.r1 * scale,
+      r0: before.params.r0 * scale,
+      r1: before.params.r1 * scale,
     });
     expect(after.measures.centerlineLengthMm).toBeLessThanOrEqual(1210);
   });
 
   it('notches: the suggested depth per km stops the clamping', () => {
-    const before = build(SHORT_WINDOW_PRESET);
+    const before = build({ ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 });
     expect(before.level('notches')).toBe('warn');
     const suggested = /Drop the depth per km to (\d+(?:\.\d+)?) mm\/km/.exec(before.find('notches').adviceEn!);
     expect(suggested).not.toBeNull();
-    const after = build({ ...SHORT_WINDOW_PRESET, notchDepthPerKm: Number(suggested![1]) });
+    const after = build({
+      ...SHORT_WINDOW_PRESET,
+      r0: 40,
+      r1: 110,
+      notchDepthPerKm: Number(suggested![1]),
+    });
     expect(after.wall.clampedNotches).toEqual([]);
     expect(after.level('notches')).toBe('ok');
+    // The short window still leaves two eruptions off the piece; that is the
+    // window's doing and is reported on its own row.
+    expect(after.level('eventCoverage')).toBe('warn');
   });
 
   it('does not offer the short-window preset when the window is already short', () => {
-    const { checks } = build({ ...SHORT_WINDOW_PRESET, r0: 4, r1: 8 });
+    const { checks } = build({ ...SHORT_WINDOW_PRESET, r0: 5, r1: 8 });
     const advice = checks.filter((check) => check.level !== 'ok').map((check) => check.adviceEn ?? '');
     for (const text of advice) expect(text).not.toContain('short window');
   });
@@ -340,16 +356,21 @@ describe('the turn suggestions are exact, not linearised', () => {
 describe('one-click fixes', () => {
   /** Every configuration the panel is likely to be left in by a wrong turn. */
   const BROKEN: Array<[string, Partial<Params>]> = [
-    ['defaults', {}],
+    ['spiral defaults', {}],
+    ['circle defaults', { ...DEFAULT_PARAMS }],
+    ['circle, tiny ring', { ...DEFAULT_PARAMS, r0: 20 }],
+    ['circle, past the kiln', { ...DEFAULT_PARAMS, r0: 200 }],
     ['spring–neap at default radii', { clockMode: 'springNeap' }],
     ['linear, far too many turns', { clockMode: 'linear', linearTurns: 12 }],
     ['linear, far too few turns', { clockMode: 'linear', linearTurns: 0.5 }],
     ['radius past the kiln', { r1: 400 }],
     ['gain far too high', { k: 1 }],
     ['radii inverted', { r0: 140, r1: 30 }],
-    ['short window', SHORT_WINDOW_PRESET],
+    ['short window', { ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 }],
     ['short window, tiny radii', { ...SHORT_WINDOW_PRESET, r0: 8, r1: 20 }],
     ['thick wall, no clearance room', { wallThickness: 18, clearanceMm: 30 }],
+    ['spring–neap at ring radii', { clockMode: 'springNeap' as const, r0: 160, r1: 260 }],
+    ['linear 12 turns at ring radii', { clockMode: 'linear' as const, linearTurns: 12, r0: 160, r1: 260 }],
     ['smallest radii the panel allows', { r0: 5, r1: 20 }],
   ];
 
@@ -362,7 +383,9 @@ describe('one-click fixes', () => {
           // A fix may be absent only when no single parameter can clear it, and
           // the advice then has to say what to do instead.
           if (check.fix === null) {
-            expect(check.adviceEn, `${name}/${check.id}`).toMatch(/Shorten|thin the wall|bigger kiln|raise k/i);
+            expect(check.adviceEn, `${name}/${check.id}`).toMatch(
+              /Shorten|thin the wall|bigger kiln|raise k|Widen the dates/i,
+            );
           }
         }
       }
@@ -414,7 +437,10 @@ describe('one-click fixes', () => {
           const was = before.checks.find((b) => b.id === c.id)!;
           return rank[c.level] > rank[was.level] && c.id !== check.id;
         });
-        expect(worse.length, `${name}: ${check.id} fix "${check.fix.labelEn}"`).toBeLessThanOrEqual(1);
+        // Trade-offs can touch more than one row — shortening the window both
+        // coarsens the tide and leaves eruptions off — but a fix must never set
+        // off a chain of them.
+        expect(worse.length, `${name}: ${check.id} fix "${check.fix.labelEn}"`).toBeLessThanOrEqual(2);
         for (const c of worse) {
           const was = before.checks.find((b) => b.id === c.id)!;
           if (was.level === 'ok') {

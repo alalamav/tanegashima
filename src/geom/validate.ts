@@ -5,8 +5,19 @@
 
 import type { VolcanoEvent } from '../data/series.js';
 import type { MeshData, Wall } from './wall.js';
-import { greenScale, snapDown, snapUp, SHORT_WINDOW_PRESET, type Params } from './params.js';
 import {
+  greenScale,
+  isSpiral,
+  outerRadius,
+  outerRadiusKey,
+  PARAM_RANGES,
+  snapDown,
+  snapUp,
+  SHORT_WINDOW_PRESET,
+  type Params,
+} from './params.js';
+import {
+  approximateLength,
   maxGainForHeight,
   maxWindowHoursForFeature,
   radiusScaleForLength,
@@ -75,8 +86,8 @@ export interface Measures {
 export function measure(wall: Wall, params: Params): Measures {
   const windowHours = wall.clock.window.count - 1;
   return {
-    firedOuterDiameterMm: 2 * (params.r1 + params.wallThickness / 2),
-    greenOuterDiameterMm: 2 * (params.r1 + params.wallThickness / 2) * greenScale(params),
+    firedOuterDiameterMm: 2 * (outerRadius(params) + params.wallThickness / 2),
+    greenOuterDiameterMm: 2 * (outerRadius(params) + params.wallThickness / 2) * greenScale(params),
     turnSpacingMm: wall.spiral.turnSpacing,
     centerlineLengthMm: wall.spiral.length,
     // One semidiurnal cycle occupies this much arc length, on average.
@@ -140,79 +151,112 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
 
   // --------------------------------------------------------------------- 1
   // Enough radial room between turns for a hand and a tool.
+  //
+  // A ring has one turn and no neighbour to be spaced from, so the check does
+  // not apply at all in circle mode and is left out rather than reported as a
+  // meaningless pass.
   const needed = params.wallThickness + params.clearanceMm;
-  const spacingOk = atLeast(m.turnSpacingMm, needed);
+  if (isSpiral(params.clockMode)) {
+    const spacingOk = atLeast(m.turnSpacingMm, needed);
 
-  // Widening r₁ is the obvious lever, but it must not push the piece out of the
-  // kiln — a fix that trades one red row for another is not a fix. So the
-  // suggestion is capped at the largest r₁ the kiln allows, and when even that
-  // cannot hold these turns the lever moves to whatever else is still free.
-  const wantedR1 = snapUp('r1', params.r0 + guidance.requiredSpanMm);
-  const cappedR1 = snapDown('r1', guidance.maxR1Mm);
-  const spacingAtCap = Math.abs(m.turns) > 0 ? (cappedR1 - params.r0) / Math.abs(m.turns) : 0;
-  const clearanceAtCap = snapDown('clearanceMm', spacingAtCap - params.wallThickness);
-  const turnsAtCap = snapDown('linearTurns', (cappedR1 - params.r0) / needed);
+    // Widening r₁ is the obvious lever, but it must not push the piece out of
+    // the kiln — a fix that trades one red row for another is not a fix. So the
+    // suggestion is capped at the largest r₁ the kiln allows, and when even
+    // that cannot hold these turns the lever moves to whatever is still free:
+    // the turns in linear mode, r₀ otherwise, and only then the clearance.
+    const wantedR1 = snapUp('r1', params.r0 + guidance.requiredSpanMm);
+    const cappedR1 = snapDown('r1', guidance.maxOuterRadiusMm);
+    const spacingAtCap = Math.abs(m.turns) > 0 ? (cappedR1 - params.r0) / Math.abs(m.turns) : 0;
+    // Same clamping trap as the inner radius: snapDown floors at the slider's
+    // minimum, so a negative requirement would come back as a usable zero.
+    const clearanceRaw = spacingAtCap - params.wallThickness;
+    const clearanceAtCap = snapDown('clearanceMm', clearanceRaw);
+    const clearanceWorks = clearanceRaw >= 0;
+    // Fewer turns means a shorter wall, so the turn count that fits the kiln is
+    // only usable if it still leaves one tidal cycle wide enough to carve.
+    const turnsAtCap = snapDown('linearTurns', (cappedR1 - params.r0) / needed);
+    // Compare the SNAPPED turns, not the raw ones: snapping down can take a
+    // value that just cleared the minimum back below it.
+    const turnsAtCapReadable = turnsAtCap >= guidance.minTurns;
+    // Pulling r₀ inward buys the same span without growing the piece — but only
+    // if there is room to pull it to. snapDown clamps to the slider's minimum,
+    // which would otherwise hand back a value that does not actually fit.
+    const innerRaw = Math.min(params.r1, cappedR1) - guidance.requiredSpanMm;
+    const innerForSpan = snapDown('r0', innerRaw);
+    const innerWorks = innerRaw >= PARAM_RANGES.r0.min && innerForSpan < params.r0;
 
-  let spacingFix: CheckFix | null = null;
-  let spacingLeverEs = '';
-  let spacingLeverEn = '';
+    let spacingFix: CheckFix | null = null;
+    let spacingLeverEs = '';
+    let spacingLeverEn = '';
 
-  if (!spacingOk) {
-    if (params.r0 >= params.r1) {
-      // The spiral is winding inward; nothing about the turns is wrong.
-      spacingFix = {
-        patch: { r0: params.r1, r1: params.r0 },
-        labelEs: 'intercambiar r₀ y r₁',
-        labelEn: 'swap r₀ and r₁',
-      };
-      spacingLeverEs = 'r₀ es mayor que r₁, así que la espiral se enrolla hacia dentro: intercámbielos';
-      spacingLeverEn = 'r₀ is larger than r₁, so the spiral winds inward: swap them';
-    } else if (wantedR1 <= cappedR1) {
-      spacingFix = { patch: { r1: wantedR1 }, labelEs: `r₁ → ${show(wantedR1)} mm`, labelEn: `r₁ → ${show(wantedR1)} mm` };
-      spacingLeverEs = `Suba r₁ a ${show(wantedR1)} mm (ahora ${n(params.r1)})`;
-      spacingLeverEn = `Raise r₁ to ${show(wantedR1)} mm (now ${n(params.r1)})`;
-    } else if (guidance.turnsAreUserSet && turnsAtCap > 0) {
-      spacingFix = {
-        patch: { r1: cappedR1, linearTurns: turnsAtCap },
-        labelEs: `r₁ → ${show(cappedR1)} mm, vueltas → ${turnsAtCap}`,
-        labelEn: `r₁ → ${show(cappedR1)} mm, turns → ${turnsAtCap}`,
-      };
-      spacingLeverEs = `El horno no admite un r₁ mayor que ${show(cappedR1)} mm, así que suba r₁ hasta ahí y baje las vueltas a ${turnsAtCap}`;
-      spacingLeverEn = `The kiln will not take an r₁ past ${show(cappedR1)} mm, so raise r₁ to it and drop the turns to ${turnsAtCap}`;
-    } else if (clearanceAtCap >= 0) {
-      spacingFix = {
-        patch: { r1: cappedR1, clearanceMm: clearanceAtCap },
-        labelEs: `r₁ → ${show(cappedR1)} mm, holgura → ${show(clearanceAtCap)} mm`,
-        labelEn: `r₁ → ${show(cappedR1)} mm, clearance → ${show(clearanceAtCap)} mm`,
-      };
-      spacingLeverEs = `El horno no admite un r₁ mayor que ${show(cappedR1)} mm, así que suba r₁ hasta ahí y acepte una holgura de ${show(clearanceAtCap)} mm`;
-      spacingLeverEn = `The kiln will not take an r₁ past ${show(cappedR1)} mm, so raise r₁ to it and accept a clearance of ${show(clearanceAtCap)} mm`;
-    } else {
-      spacingLeverEs = `Ni con el r₁ máximo del horno (${show(cappedR1)} mm) caben ${n(m.turns, 2)} vueltas de muro de ${n(params.wallThickness)} mm. Acorte la ventana, adelgace el muro o use un horno mayor`;
-      spacingLeverEn = `Even at the kiln's largest r₁ (${show(cappedR1)} mm) there is no room for ${n(m.turns, 2)} turns of ${n(params.wallThickness)} mm wall. Shorten the window, thin the wall, or use a bigger kiln`;
+    if (!spacingOk) {
+      if (params.r0 >= params.r1) {
+        // The spiral is winding inward; nothing about the turns is wrong.
+        spacingFix = {
+          patch: { r0: params.r1, r1: params.r0 },
+          labelEs: 'intercambiar r₀ y r₁',
+          labelEn: 'swap r₀ and r₁',
+        };
+        spacingLeverEs = 'r₀ es mayor que r₁, así que la espiral se enrolla hacia dentro: intercámbielos';
+        spacingLeverEn = 'r₀ is larger than r₁, so the spiral winds inward: swap them';
+      } else if (wantedR1 <= cappedR1) {
+        spacingFix = { patch: { r1: wantedR1 }, labelEs: `r₁ → ${show(wantedR1)} mm`, labelEn: `r₁ → ${show(wantedR1)} mm` };
+        spacingLeverEs = `Suba r₁ a ${show(wantedR1)} mm (ahora ${n(params.r1)})`;
+        spacingLeverEn = `Raise r₁ to ${show(wantedR1)} mm (now ${n(params.r1)})`;
+      } else if (guidance.turnsAreUserSet && turnsAtCap > 0 && turnsAtCapReadable) {
+        spacingFix = {
+          patch: { r1: cappedR1, linearTurns: turnsAtCap },
+          labelEs: `r₁ → ${show(cappedR1)} mm, vueltas → ${turnsAtCap}`,
+          labelEn: `r₁ → ${show(cappedR1)} mm, turns → ${turnsAtCap}`,
+        };
+        spacingLeverEs = `El horno no admite un r₁ mayor que ${show(cappedR1)} mm, así que suba r₁ hasta ahí y baje las vueltas a ${turnsAtCap}`;
+        spacingLeverEn = `The kiln will not take an r₁ past ${show(cappedR1)} mm, so raise r₁ to it and drop the turns to ${turnsAtCap}`;
+      } else if (innerWorks) {
+        spacingFix = {
+          patch: { r0: innerForSpan, r1: Math.min(params.r1, cappedR1) },
+          labelEs: `r₀ → ${show(innerForSpan)} mm`,
+          labelEn: `r₀ → ${show(innerForSpan)} mm`,
+        };
+        spacingLeverEs = `El horno no admite un r₁ mayor que ${show(cappedR1)} mm, así que haga sitio hacia dentro: baje r₀ a ${show(innerForSpan)} mm (ahora ${n(params.r0)})`;
+        spacingLeverEn = `The kiln will not take an r₁ past ${show(cappedR1)} mm, so make the room inward instead: drop r₀ to ${show(innerForSpan)} mm (now ${n(params.r0)})`;
+      } else if (clearanceWorks) {
+        spacingFix = {
+          patch: { r1: cappedR1, clearanceMm: clearanceAtCap },
+          labelEs: `r₁ → ${show(cappedR1)} mm, holgura → ${show(clearanceAtCap)} mm`,
+          labelEn: `r₁ → ${show(cappedR1)} mm, clearance → ${show(clearanceAtCap)} mm`,
+        };
+        spacingLeverEs = `El horno no admite un r₁ mayor que ${show(cappedR1)} mm, así que suba r₁ hasta ahí y acepte una holgura de ${show(clearanceAtCap)} mm`;
+        spacingLeverEn = `The kiln will not take an r₁ past ${show(cappedR1)} mm, so raise r₁ to it and accept a clearance of ${show(clearanceAtCap)} mm`;
+      } else {
+        spacingLeverEs = `Ni con el r₁ máximo del horno (${show(cappedR1)} mm) caben ${n(m.turns, 2)} vueltas de muro de ${n(params.wallThickness)} mm. Acorte la ventana, adelgace el muro o use un horno mayor`;
+        spacingLeverEn = `Even at the kiln's largest r₁ (${show(cappedR1)} mm) there is no room for ${n(m.turns, 2)} turns of ${n(params.wallThickness)} mm wall. Shorten the window, thin the wall, or use a bigger kiln`;
+      }
     }
+
+    checks.push({
+      id: 'turnSpacing',
+      labelEs: 'Separación entre vueltas',
+      labelEn: 'Turn spacing',
+      level: spacingOk ? 'ok' : 'fail',
+      value: `${n(m.turnSpacingMm)} mm`,
+      limit: `≥ ${n(needed)} mm`,
+      explainEs:
+        'Distancia radial entre una vuelta y la siguiente, (r₁ − r₀) ÷ vueltas. Tiene que caber el muro más sitio para los dedos y las herramientas.',
+      explainEn:
+        'Radial distance from one turn to the next, (r₁ − r₀) ÷ turns. It has to fit the wall plus room for fingers and tools.',
+      adviceEs: spacingOk ? null : `${spacingLeverEs}; ${modeNoteEs}.`,
+      adviceEn: spacingOk ? null : `${spacingLeverEn}; ${modeNoteEn}.`,
+      fix: spacingFix,
+    });
   }
-
-  checks.push({
-    id: 'turnSpacing',
-    labelEs: 'Separación entre vueltas',
-    labelEn: 'Turn spacing',
-    level: spacingOk ? 'ok' : 'fail',
-    value: `${n(m.turnSpacingMm)} mm`,
-    limit: `≥ ${n(needed)} mm`,
-    explainEs:
-      'Distancia radial entre una vuelta y la siguiente, (r₁ − r₀) ÷ vueltas. Tiene que caber el muro más sitio para los dedos y las herramientas.',
-    explainEn:
-      'Radial distance from one turn to the next, (r₁ − r₀) ÷ turns. It has to fit the wall plus room for fingers and tools.',
-    adviceEs: spacingOk ? null : `${spacingLeverEs}; ${modeNoteEs}.`,
-    adviceEn: spacingOk ? null : `${spacingLeverEn}; ${modeNoteEn}.`,
-    fix: spacingFix,
-  });
-
   // --------------------------------------------------------------------- 2
   // The green piece has to fit the kiln.
   const kilnOk = atMost(m.greenOuterDiameterMm, params.kilnLimitMm);
-  const kilnR1 = snapDown('r1', guidance.maxR1Mm);
+  // Whichever radius is on the outside is the one that has to come in: r₁ for a
+  // spiral, r₀ for a ring.
+  const outerKey = outerRadiusKey(params);
+  const outerName = outerKey === 'r1' ? 'r₁' : 'r₀';
+  const kilnRadius = snapDown(outerKey, guidance.maxOuterRadiusMm);
   checks.push({
     id: 'kiln',
     labelEs: 'Diámetro en crudo',
@@ -226,11 +270,17 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
       'Outer diameter before firing: the fired size divided by (1 − shrinkage). This is what has to fit in the kiln.',
     adviceEs: kilnOk
       ? null
-      : `Baje r₁ a ${show(kilnR1)} mm (ahora ${n(params.r1)}), o suba el límite del horno a ${up(m.greenOuterDiameterMm)} mm si cabe de verdad.`,
+      : `Baje ${outerName} a ${show(kilnRadius)} mm (ahora ${n(outerRadius(params))}), o suba el límite del horno a ${up(m.greenOuterDiameterMm)} mm si cabe de verdad.`,
     adviceEn: kilnOk
       ? null
-      : `Drop r₁ to ${show(kilnR1)} mm (now ${n(params.r1)}), or raise the kiln limit to ${up(m.greenOuterDiameterMm)} mm if it really fits.`,
-    fix: kilnOk ? null : { patch: { r1: kilnR1 }, labelEs: `r₁ → ${show(kilnR1)} mm`, labelEn: `r₁ → ${show(kilnR1)} mm` },
+      : `Drop ${outerName} to ${show(kilnRadius)} mm (now ${n(outerRadius(params))}), or raise the kiln limit to ${up(m.greenOuterDiameterMm)} mm if it really fits.`,
+    fix: kilnOk
+      ? null
+      : {
+          patch: { [outerKey]: kilnRadius } as Partial<Params>,
+          labelEs: `${outerName} → ${show(kilnRadius)} mm`,
+          labelEn: `${outerName} → ${show(kilnRadius)} mm`,
+        },
   });
 
   // --------------------------------------------------------------------- 3
@@ -247,26 +297,62 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
   const targetLength = guidance.requiredLengthMm * 1.55;
   const featureTurns = snapUp('linearTurns', turnsForLength(params.r0, params.r1, targetLength));
   const featureScale = Number(up(radiusScaleForLength(m.centerlineLengthMm, targetLength), 2));
-  const featureFix: CheckFix = guidance.turnsAreUserSet
-    ? {
-        patch: { linearTurns: featureTurns },
-        labelEs: `vueltas → ${featureTurns}`,
-        labelEn: `turns → ${featureTurns}`,
-      }
-    : {
-        patch: {
-          r0: snapUp('r0', params.r0 * featureScale),
-          r1: snapUp('r1', params.r1 * featureScale),
-        },
-        labelEs: `radios → ${snapUp('r0', params.r0 * featureScale)} / ${snapUp('r1', params.r1 * featureScale)} mm`,
-        labelEn: `radii → ${snapUp('r0', params.r0 * featureScale)} / ${snapUp('r1', params.r1 * featureScale)} mm`,
+
+  // A ring can only grow until the kiln stops it. Once there, the remaining
+  // lever is time: fewer hours around the same circumference.
+  const ringRadius = snapUp('r0', (targetLength / (2 * Math.PI)));
+  const ringCap = snapDown('r0', guidance.maxOuterRadiusMm);
+  const ringFits = ringRadius <= ringCap;
+  const hoursThatFit = Math.max(
+    24,
+    Math.floor((m.centerlineLengthMm * M2_PERIOD_HOURS) / (params.minFeatureMm * 1.55)),
+  );
+  const shorterEnd = new Date(
+    Date.parse(params.windowStartUtc) + hoursThatFit * 3_600_000,
+  ).toISOString();
+
+  let featureFix: CheckFix;
+  let featureLeverEs: string;
+  let featureLeverEn: string;
+  if (!isSpiral(params.clockMode)) {
+    if (ringFits) {
+      featureFix = {
+        patch: { r0: ringRadius },
+        labelEs: `r₀ → ${show(ringRadius)} mm`,
+        labelEn: `r₀ → ${show(ringRadius)} mm`,
       };
-  const featureLeverEs = guidance.turnsAreUserSet
-    ? `Suba las vueltas a ${featureTurns}`
-    : `Multiplique r₀ y r₁ por ${featureScale}`;
-  const featureLeverEn = guidance.turnsAreUserSet
-    ? `Raise the turns to ${featureTurns}`
-    : `Multiply r₀ and r₁ by ${featureScale}`;
+      featureLeverEs = `Suba r₀ a ${show(ringRadius)} mm para que el anillo mida ${up(targetLength)} mm de contorno (ahora ${n(m.centerlineLengthMm)})`;
+      featureLeverEn = `Raise r₀ to ${show(ringRadius)} mm so the ring measures ${up(targetLength)} mm around (now ${n(m.centerlineLengthMm)})`;
+    } else {
+      featureFix = {
+        patch: { windowEndUtc: shorterEnd },
+        labelEs: `ventana → ${Math.floor(hoursThatFit / 24)} días`,
+        labelEn: `window → ${Math.floor(hoursThatFit / 24)} days`,
+      };
+      featureLeverEs = `El horno no admite un anillo mayor que r₀ = ${show(ringCap)} mm, así que meta menos tiempo en el mismo contorno: acorte la ventana a ${Math.floor(hoursThatFit / 24)} días`;
+      featureLeverEn = `The kiln will not take a ring past r₀ = ${show(ringCap)} mm, so put less time around the same circumference: shorten the window to ${Math.floor(hoursThatFit / 24)} days`;
+    }
+  } else if (guidance.turnsAreUserSet) {
+    featureFix = {
+      patch: { linearTurns: featureTurns },
+      labelEs: `vueltas → ${featureTurns}`,
+      labelEn: `turns → ${featureTurns}`,
+    };
+    featureLeverEs = `Suba las vueltas a ${featureTurns} para alargar el muro a ${up(targetLength)} mm (ahora ${n(m.centerlineLengthMm)})`;
+    featureLeverEn = `Raise the turns to ${featureTurns} to lengthen the wall to ${up(targetLength)} mm (now ${n(m.centerlineLengthMm)})`;
+  } else {
+    featureFix = {
+      patch: {
+        r0: snapUp('r0', params.r0 * featureScale),
+        r1: snapUp('r1', params.r1 * featureScale),
+      },
+      labelEs: `radios → ${snapUp('r0', params.r0 * featureScale)} / ${snapUp('r1', params.r1 * featureScale)} mm`,
+      labelEn: `radii → ${snapUp('r0', params.r0 * featureScale)} / ${snapUp('r1', params.r1 * featureScale)} mm`,
+    };
+    featureLeverEs = `Multiplique r₀ y r₁ por ${featureScale} para alargar el muro a ${up(targetLength)} mm (ahora ${n(m.centerlineLengthMm)})`;
+    featureLeverEn = `Multiply r₀ and r₁ by ${featureScale} to lengthen the wall to ${up(targetLength)} mm (now ${n(m.centerlineLengthMm)})`;
+  }
+
   checks.push({
     id: 'tideWavelength',
     labelEs: 'Longitud de onda de la marea',
@@ -281,11 +367,11 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     adviceEs:
       featureLevel === 'ok'
         ? null
-        : `${featureLeverEs} para alargar el muro a ${up(targetLength)} mm (ahora ${n(m.centerlineLengthMm)}). O acorte la ventana a ≤ ${Math.floor(maxHours / 24)} días. O acepte el tamaño y suba el suavizado por encima de ${n(params.minFeatureMm)} mm para quitar la oscilación fina a propósito.`,
+        : `${featureLeverEs}. O acorte la ventana a ≤ ${Math.floor(maxHours / 24)} días. O acepte el tamaño y suba el suavizado por encima de ${n(params.minFeatureMm)} mm para quitar la oscilación fina a propósito.`,
     adviceEn:
       featureLevel === 'ok'
         ? null
-        : `${featureLeverEn} to lengthen the wall to ${up(targetLength)} mm (now ${n(m.centerlineLengthMm)}). Or shorten the window to ≤ ${Math.floor(maxHours / 24)} days. Or accept the size and raise the smoothing above ${n(params.minFeatureMm)} mm to drop the fine oscillation on purpose.`,
+        : `${featureLeverEn}. Or shorten the window to ≤ ${Math.floor(maxHours / 24)} days. Or accept the size and raise the smoothing above ${n(params.minFeatureMm)} mm to drop the fine oscillation on purpose.`,
     fix: featureLevel === 'ok' ? null : featureFix,
   });
 
@@ -330,40 +416,61 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     : atMost(m.centerlineLengthMm, 2000)
       ? 'warn'
       : 'fail';
-  // The short window is the brief's own answer to a long wall, so it leads
-  // whenever the window is long enough for it to be a real change.
-  const shortWindowHelps = m.windowHours > 20 * 24;
   const comfortableTurns = snapDown('linearTurns', turnsForLength(params.r0, params.r1, 1200));
   const comfortableScale = Number(down(radiusScaleForLength(m.centerlineLengthMm, 1200), 2));
-  // In linear mode the window does not set the length at all — the turns do — so
-  // offering the short-window preset there would change the piece without
-  // shortening the wall.
-  const lengthFix: CheckFix = guidance.turnsAreUserSet
-    ? {
-        patch: { linearTurns: comfortableTurns },
-        labelEs: `vueltas → ${comfortableTurns}`,
-        labelEn: `turns → ${comfortableTurns}`,
-      }
-    : shortWindowHelps
-      ? { patch: { ...SHORT_WINDOW_PRESET }, labelEs: 'ventana corta', labelEn: 'short window' }
-      : {
-          patch: {
-            r0: snapDown('r0', params.r0 * comfortableScale),
-            r1: snapDown('r1', params.r1 * comfortableScale),
-          },
-          labelEs: `radios → ${snapDown('r0', params.r0 * comfortableScale)} / ${snapDown('r1', params.r1 * comfortableScale)} mm`,
-          labelEn: `radii → ${snapDown('r0', params.r0 * comfortableScale)} / ${snapDown('r1', params.r1 * comfortableScale)} mm`,
-        };
-  const lengthLeverEs = guidance.turnsAreUserSet
-    ? `Baje las vueltas a ${comfortableTurns}`
-    : shortWindowHelps
-      ? 'Use la ventana corta (26 sep – 15 oct, dos tercios de vuelta alrededor de las dos erupciones de octubre)'
-      : `Multiplique r₀ y r₁ por ${comfortableScale}`;
-  const lengthLeverEn = guidance.turnsAreUserSet
-    ? `Drop the turns to ${comfortableTurns}`
-    : shortWindowHelps
-      ? 'Use the short window (26 Sep – 15 Oct, two-thirds of a turn around the two October eruptions)'
-      : `Multiply r₀ and r₁ by ${comfortableScale}`;
+  const comfortableRing = snapDown('r0', 1200 / (2 * Math.PI));
+  // The short window is the brief's own answer to a long wall, so it leads
+  // whenever the window is long enough for it to be a real change. In linear
+  // mode the window sets no length at all — the turns do — so it is skipped
+  // there, and a ring's only lever is its radius.
+  // Offering the short window is only honest if it would actually bring the
+  // wall under budget. The turns of a lunar mode scale with the window, so the
+  // length after the preset can be estimated before proposing it.
+  const shortWindowHours =
+    (Date.parse(SHORT_WINDOW_PRESET.windowEndUtc!) - Date.parse(SHORT_WINDOW_PRESET.windowStartUtc!)) /
+    3_600_000;
+  const turnsAfterShort = m.turns * (shortWindowHours / Math.max(m.windowHours, 1));
+  const shortWindowHelps =
+    m.windowHours > 20 * 24 && approximateLength(params.r0, params.r1, turnsAfterShort) <= 1200;
+
+  let lengthFix: CheckFix;
+  let lengthLeverEs: string;
+  let lengthLeverEn: string;
+  if (!isSpiral(params.clockMode)) {
+    lengthFix = {
+      patch: { r0: comfortableRing },
+      labelEs: `r₀ → ${show(comfortableRing)} mm`,
+      labelEn: `r₀ → ${show(comfortableRing)} mm`,
+    };
+    lengthLeverEs = `Baje r₀ a ${show(comfortableRing)} mm, que da un anillo de 1.2 m de contorno`;
+    lengthLeverEn = `Drop r₀ to ${show(comfortableRing)} mm, which gives a ring 1.2 m around`;
+  } else if (guidance.turnsAreUserSet) {
+    lengthFix = {
+      patch: { linearTurns: comfortableTurns },
+      labelEs: `vueltas → ${comfortableTurns}`,
+      labelEn: `turns → ${comfortableTurns}`,
+    };
+    lengthLeverEs = `Baje las vueltas a ${comfortableTurns}`;
+    lengthLeverEn = `Drop the turns to ${comfortableTurns}`;
+  } else if (shortWindowHelps) {
+    lengthFix = { patch: { ...SHORT_WINDOW_PRESET }, labelEs: 'ventana corta', labelEn: 'short window' };
+    lengthLeverEs =
+      'Use la ventana corta (26 sep – 15 oct, dos tercios de vuelta alrededor de las dos erupciones de octubre)';
+    lengthLeverEn =
+      'Use the short window (26 Sep – 15 Oct, two-thirds of a turn around the two October eruptions)';
+  } else {
+    lengthFix = {
+      patch: {
+        r0: snapDown('r0', params.r0 * comfortableScale),
+        r1: snapDown('r1', params.r1 * comfortableScale),
+      },
+      labelEs: `radios → ${snapDown('r0', params.r0 * comfortableScale)} / ${snapDown('r1', params.r1 * comfortableScale)} mm`,
+      labelEn: `radii → ${snapDown('r0', params.r0 * comfortableScale)} / ${snapDown('r1', params.r1 * comfortableScale)} mm`,
+    };
+    lengthLeverEs = `Multiplique r₀ y r₁ por ${comfortableScale}`;
+    lengthLeverEn = `Multiply r₀ and r₁ by ${comfortableScale}`;
+  }
+
   checks.push({
     id: 'wallLength',
     labelEs: 'Longitud del muro',
@@ -395,6 +502,7 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
   // that actually sets that notch's depth, which is k_e for an event with a
   // plume and d₀ for one without.
   const clamped = wall.clampedNotches;
+  const droppedIds = wall.droppedEvents.map((event) => event.id);
   const limits = notchDepthLimits(wall, params);
   const deepest = wall.notches.reduce((worst, notch) => Math.max(worst, notch.depth), 0);
   const perKmOver = params.notchDepthPerKm > limits.maxDepthPerKm;
@@ -429,20 +537,47 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     labelEn: 'Eruption notches',
     level: clamped.length === 0 ? 'ok' : 'warn',
     value: `${m.notchCount}`,
-    limit: clamped.length === 0 ? 'sin recortes' : `recortadas: ${clamped.join(', ')}`,
+    limit: clamped.length > 0 ? `recortadas: ${clamped.join(', ')}` : 'sin recortes',
     explainEs:
       'Una muesca por erupción dentro de la ventana. Las de día entero salen anchas y poco profundas; las instantáneas, estrechas y tan hondas como alta fue la pluma. Si una corta más que el muro, se recorta y deja 1 mm de suelo.',
     explainEn:
       'One notch per eruption inside the window. Day-precision events come out wide and shallow; instants come out narrow and as deep as the plume was tall. If one cuts deeper than the wall, it is clamped and 1 mm of floor is left.',
     adviceEs:
-      clamped.length === 0
-        ? null
-        : `${notchLeverEs}. ${clamped.join(', ')} corta hasta ${n(deepest)} mm donde el muro mide ${n(limits.lowestCrestAtNotch)} mm; también puede subir k o h_base para tener más muro donde cortar.`,
+      clamped.length > 0
+        ? `${notchLeverEs}. ${clamped.join(', ')} corta hasta ${n(deepest)} mm donde el muro mide ${n(limits.lowestCrestAtNotch)} mm; también puede subir k o h_base para tener más muro donde cortar.`
+        : null,
     adviceEn:
-      clamped.length === 0
+      clamped.length > 0
+        ? `${notchLeverEn}. ${clamped.join(', ')} cuts up to ${n(deepest)} mm where the wall is ${n(limits.lowestCrestAtNotch)} mm tall; you can also raise k or h_base for more wall to cut into.`
+        : null,
+    fix: clamped.length > 0 ? notchFix : null,
+  });
+
+  // --------------------------------------------------------------------- 7
+  // Which eruptions made it onto the piece. This is the window's doing, not a
+  // parameter to nudge, so it is reported separately from the notch depths and
+  // carries no button: only dates to reconsider.
+  const totalEvents = m.notchCount + droppedIds.length;
+  checks.push({
+    id: 'eventCoverage',
+    labelEs: 'Erupciones en la ventana',
+    labelEn: 'Eruptions in the window',
+    level: droppedIds.length === 0 ? 'ok' : 'warn',
+    value: `${m.notchCount}/${totalEvents}`,
+    limit: droppedIds.length === 0 ? 'todas' : `fuera: ${droppedIds.join(', ')}`,
+    explainEs:
+      'Cuántas de las erupciones curadas caen dentro de la ventana y reciben muesca. Las que quedan fuera siguen en la lista, atenuadas, pero no están en la pieza.',
+    explainEn:
+      'How many of the curated eruptions fall inside the window and get a notch. The ones outside stay in the list, dimmed, but they are not on the piece.',
+    adviceEs:
+      droppedIds.length === 0
         ? null
-        : `${notchLeverEn}. ${clamped.join(', ')} cuts up to ${n(deepest)} mm where the wall is ${n(limits.lowestCrestAtNotch)} mm tall; you can also raise k or h_base for more wall to cut into.`,
-    fix: clamped.length === 0 ? null : notchFix,
+        : `${droppedIds.join(', ')} ${droppedIds.length === 1 ? 'queda' : 'quedan'} fuera de la ventana. Amplíe las fechas si ${droppedIds.length === 1 ? 'debe' : 'deben'} estar en la pieza; si no, es una decisión, no un error.`,
+    adviceEn:
+      droppedIds.length === 0
+        ? null
+        : `${droppedIds.join(', ')} ${droppedIds.length === 1 ? 'falls' : 'fall'} outside the window. Widen the dates if ${droppedIds.length === 1 ? 'it belongs' : 'they belong'} on the piece; otherwise this is a choice, not a mistake.`,
+    fix: null,
   });
 
   return { checks, measures: m };

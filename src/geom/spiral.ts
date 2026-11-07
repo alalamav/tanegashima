@@ -46,6 +46,11 @@ export interface SpiralSample {
 
 export interface Spiral {
   samples: SpiralSample[];
+  /**
+   * True when the last sample joins back to the first. A closed centerline has
+   * no ends: the mesh wraps instead of being capped, and arc length is modular.
+   */
+  closed: boolean;
   /** Total centerline length, mm. */
   length: number;
   /** Radial distance between consecutive turns, mm. */
@@ -58,8 +63,12 @@ export interface Spiral {
   sampleAtArcLength(s: number): SpiralSample;
 }
 
-/** r(theta), linear in the unwrapped angle. */
+/**
+ * r(theta), linear in the unwrapped angle — except in circle mode, where the
+ * radius is constant at r0 and the wall closes on itself.
+ */
 export function radiusAt(theta: number, clock: Clock, params: Params): number {
+  if (clock.closed) return params.r0;
   const span = clock.thetaEnd - clock.thetaStart;
   if (span === 0) return params.r0;
   const u = (theta - clock.thetaStart) / span;
@@ -132,14 +141,22 @@ export function buildSpiral(
 
   // 2. Dense walk of the spline, accumulating arc length. 8 substeps per hour is
   //    far finer than the 0.5 mm resampling step anywhere on the piece.
+  const closed = clock.closed;
+  const count = control.length;
   const SUBSTEPS = 8;
   const dense: Array<{ s: number; x: number; y: number; hourIndex: number }> = [];
   let accumulated = 0;
   let previous: PlanPoint | null = null;
 
-  const at = (index: number) => control[Math.min(Math.max(index, 0), control.length - 1)];
+  // A closed centerline has no ends, so the spline wraps instead of clamping.
+  const at = (index: number) =>
+    closed
+      ? control[((index % count) + count) % count]
+      : control[Math.min(Math.max(index, 0), count - 1)];
 
-  for (let segment = 0; segment < control.length - 1; segment += 1) {
+  // One more segment when closed: the last control point back to the first.
+  const segments = closed ? count : count - 1;
+  for (let segment = 0; segment < segments; segment += 1) {
     for (let step = 0; step < SUBSTEPS; step += 1) {
       const t = step / SUBSTEPS;
       const point = catmullRom(at(segment - 1), at(segment), at(segment + 1), at(segment + 2), t);
@@ -148,14 +165,21 @@ export function buildSpiral(
         s: accumulated,
         x: point.x,
         y: point.y,
-        hourIndex: controlHour[segment] + t,
+        hourIndex: controlHour[0] + segment + t,
       });
       previous = point;
     }
   }
-  const last = at(control.length - 1);
+  // Close the walk: back onto the first point for a ring, onto the last control
+  // point for a spiral. Either way the final entry carries the total length.
+  const last = closed ? control[0] : control[count - 1];
   if (previous) accumulated += Math.hypot(last.x - previous.x, last.y - previous.y);
-  dense.push({ s: accumulated, x: last.x, y: last.y, hourIndex: controlHour[control.length - 1] });
+  dense.push({
+    s: accumulated,
+    x: last.x,
+    y: last.y,
+    hourIndex: closed ? controlHour[0] + count : controlHour[count - 1],
+  });
 
   const length = accumulated;
 
@@ -163,7 +187,9 @@ export function buildSpiral(
   const positions: number[] = [];
   const step = Math.max(params.arcStepMm, 0.05);
   for (let s = 0; s < length; s += step) positions.push(s);
-  positions.push(length);
+  // The point at s = length IS the point at s = 0 on a ring, so it is left out:
+  // a duplicated vertex there would make the mesh non-manifold at the seam.
+  if (!closed) positions.push(length);
   for (const s of extraArcPositions) {
     if (s > 0 && s < length) positions.push(s);
   }
@@ -199,9 +225,10 @@ export function buildSpiral(
   //    flipped where needed so every normal points away from the origin. A
   //    consistent outward normal is what keeps the offset walls from crossing
   //    over each other where the spiral curves hardest.
+  const wrap = (index: number) => ((index % raw.length) + raw.length) % raw.length;
   const samples: SpiralSample[] = raw.map((point, index) => {
-    const before = raw[Math.max(index - 1, 0)];
-    const after = raw[Math.min(index + 1, raw.length - 1)];
+    const before = closed ? raw[wrap(index - 1)] : raw[Math.max(index - 1, 0)];
+    const after = closed ? raw[wrap(index + 1)] : raw[Math.min(index + 1, raw.length - 1)];
     let tx = after.x - before.x;
     let ty = after.y - before.y;
     const normTangent = Math.hypot(tx, ty) || 1;
@@ -232,7 +259,12 @@ export function buildSpiral(
   });
 
   const turns = clock.turns;
-  const turnSpacing = turns > 0 ? (params.r1 - params.r0) / turns : Number.POSITIVE_INFINITY;
+  // A ring has one turn and no neighbour to be spaced from.
+  const turnSpacing = closed
+    ? Number.POSITIVE_INFINITY
+    : turns > 0
+      ? (params.r1 - params.r0) / turns
+      : Number.POSITIVE_INFINITY;
 
   // Arc length as a function of hour index, for placing events.
   const arcLengthAtHour = (hourIndex: number): number => {
@@ -253,7 +285,10 @@ export function buildSpiral(
   };
 
   const sampleAtArcLength = (s: number): SpiralSample => {
-    const clamped = Math.min(Math.max(s, 0), length);
+    // Arc length is modular on a ring: past the end is back at the start.
+    const clamped = closed
+      ? ((s % length) + length) % length
+      : Math.min(Math.max(s, 0), length);
     let low = 0;
     let high = samples.length - 1;
     while (high - low > 1) {
@@ -262,8 +297,11 @@ export function buildSpiral(
       else high = mid;
     }
     const a = samples[low];
-    const b = samples[high];
-    const span = b.s - a.s;
+    // Past the last sample of a ring the next one is the first, one step on.
+    const wrapsHere = closed && clamped >= samples[samples.length - 1].s;
+    const b = wrapsHere ? samples[0] : samples[high];
+    const bS = wrapsHere ? length : b.s;
+    const span = bS - a.s;
     const w = span > 1e-12 ? (clamped - a.s) / span : 0;
     const mix = (p: number, q: number) => p + (q - p) * w;
     return {
@@ -280,5 +318,5 @@ export function buildSpiral(
     };
   };
 
-  return { samples, length, turnSpacing, turns, arcLengthAtHour, sampleAtArcLength };
+  return { samples, closed, length, turnSpacing, turns, arcLengthAtHour, sampleAtArcLength };
 }

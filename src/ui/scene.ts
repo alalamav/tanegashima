@@ -44,6 +44,8 @@ const prefersReducedMotion = (): boolean =>
   typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export interface SceneHandle {
+  /** Diagnostics for the dev hook; not used by the app itself. */
+  debug(): Record<string, unknown>;
   setWall(wall: Wall, params: Params): void;
   setCursor(position: { x: number; y: number; height: number } | null): void;
   focusNotch(notch: Notch, wall: Wall): void;
@@ -202,8 +204,10 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
 
   // ---- the frame loop ---------------------------------------------------
   let disposed = false;
+  let frames = 0;
   const frame = (): void => {
     if (disposed) return;
+    frames += 1;
     requestAnimationFrame(frame);
 
     if (animation) {
@@ -353,6 +357,18 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   };
 
   return {
+    // Only read by the dev hook, for diagnosing what the camera is looking at.
+    debug: () => ({
+      camera: camera.position.toArray().map((v) => Math.round(v)),
+      target: controls.target.toArray().map((v) => Math.round(v)),
+      radius: currentRadius,
+      aspect: camera.aspect,
+      wallVisible: wallMesh.visible,
+      bounds: wallGeometry.boundingSphere
+        ? { c: wallGeometry.boundingSphere.center.toArray().map((v) => Math.round(v)), r: Math.round(wallGeometry.boundingSphere.radius) }
+        : null,
+      frames,
+    }),
     setWall,
     setCursor,
     focusNotch,

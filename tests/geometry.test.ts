@@ -22,7 +22,12 @@ const dataDir = resolve(import.meta.dirname, '../public/data');
 const series = JSON.parse(readFileSync(resolve(dataDir, 'series.json'), 'utf8')) as Series;
 const events = JSON.parse(readFileSync(resolve(dataDir, 'events.json'), 'utf8')) as VolcanoEvent[];
 
-const params: Params = { ...DEFAULT_PARAMS };
+/**
+ * The baseline for the spiral tests below. The app's own default is circle
+ * mode, which has no outer radius and no neighbouring turns, so the spiral
+ * cases pin their own radii rather than inheriting whatever the default is.
+ */
+const params: Params = { ...DEFAULT_PARAMS, clockMode: 'synodic', r0: 30, r1: 140 };
 
 describe('built data', () => {
   it('holds 2928 hours of Sep–Dec 1999', () => {
@@ -345,7 +350,7 @@ describe('fabrication checks', () => {
 });
 
 describe('short window preset', () => {
-  const short: Params = { ...params, ...SHORT_WINDOW_PRESET };
+  const short: Params = { ...params, ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 };
 
   it('keeps only the events inside it', () => {
     const wall = buildWall(series, events, short);
@@ -373,17 +378,126 @@ describe('parameters', () => {
   });
 
   it('omits defaults from the hash', () => {
-    expect(paramsToHash(params)).toBe('');
-    expect(paramsFromHash('')).toEqual(params);
+    expect(paramsToHash(DEFAULT_PARAMS)).toBe('');
+    expect(paramsFromHash('')).toEqual(DEFAULT_PARAMS);
   });
 
   it('ignores unknown and malformed keys', () => {
-    expect(paramsFromHash('nonsense=1&r1=abc&k=0.3')).toEqual({ ...params, k: 0.3 });
+    expect(paramsFromHash('nonsense=1&r1=abc&k=0.3')).toEqual({ ...DEFAULT_PARAMS, k: 0.3 });
   });
 
   it('hashes the config stably and distinctly', () => {
     expect(configHash(params)).toBe(configHash({ ...params }));
     expect(configHash(params)).not.toBe(configHash({ ...params, r1: 141 }));
     expect(configHash(params)).toMatch(/^[0-9a-f]{8}$/);
+  });
+});
+
+
+describe('circle mode', () => {
+  const circle: Params = { ...DEFAULT_PARAMS };
+
+  it('is what the site opens on', () => {
+    expect(DEFAULT_PARAMS.clockMode).toBe('circle');
+  });
+
+  it('closes the centerline into a ring', () => {
+    const wall = buildWall(series, events, circle);
+    expect(wall.spiral.closed).toBe(true);
+    expect(wall.clock.closed).toBe(true);
+  });
+
+  it('is exactly one turn, whatever the window', () => {
+    for (const patch of [{}, SHORT_WINDOW_PRESET, { windowEndUtc: '1999-10-26T00:00:00.000Z' }]) {
+      const wall = buildWall(series, events, { ...circle, ...patch });
+      expect(wall.clock.turns).toBe(1);
+      expect(wall.spiral.turns).toBe(1);
+    }
+  });
+
+  it('holds the radius at r₀ and ignores r₁ entirely', () => {
+    const wall = buildWall(series, events, circle);
+    for (let i = 0; i < wall.spiral.samples.length; i += 29) {
+      // Resampling a circle by arc length cuts the corner by a micron or two.
+      expect(wall.spiral.samples[i].r).toBeCloseTo(circle.r0, 3);
+    }
+    // r₁ moves, nothing about the ring does.
+    const widened = buildWall(series, events, { ...circle, r1: 399 });
+    expect(widened.spiral.length).toBeCloseTo(wall.spiral.length, 9);
+    expect(measure(widened, { ...circle, r1: 399 }).firedOuterDiameterMm).toBe(
+      measure(wall, circle).firedOuterDiameterMm,
+    );
+  });
+
+  it('measures 2πr₀ around', () => {
+    const wall = buildWall(series, events, circle);
+    expect(wall.spiral.length).toBeCloseTo(2 * Math.PI * circle.r0, 0);
+  });
+
+  it('takes its outer diameter from r₀, not r₁', () => {
+    const m = measure(buildWall(series, events, circle), circle);
+    expect(m.firedOuterDiameterMm).toBe(2 * (circle.r0 + circle.wallThickness / 2));
+  });
+
+  it('builds a watertight closed tube — a torus, not a sphere', () => {
+    const mesh = buildWallMesh(buildWall(series, events, circle), circle);
+    const report = checkManifold(mesh);
+    expect(report.watertight).toBe(true);
+    expect(report.boundaryEdges).toBe(0);
+    expect(report.nonManifoldEdges).toBe(0);
+    // A tube bent into a ring has genus 1, so its Euler characteristic is 0.
+    expect(report.eulerCharacteristic).toBe(0);
+    expect(report.volumeMm3).toBeGreaterThan(0);
+  });
+
+  it('has no duplicated sample at the seam', () => {
+    const wall = buildWall(series, events, circle);
+    const first = wall.spiral.samples[0];
+    const last = wall.spiral.samples[wall.spiral.samples.length - 1];
+    expect(Math.hypot(last.x - first.x, last.y - first.y)).toBeGreaterThan(0.01);
+    expect(wall.spiral.length - last.s).toBeGreaterThan(0);
+  });
+
+  it('wraps arc length round the seam', () => {
+    const wall = buildWall(series, events, circle);
+    const { length } = wall.spiral;
+    // A whole lap round lands back where it started...
+    const atStart = wall.spiral.sampleAtArcLength(0);
+    const fullLap = wall.spiral.sampleAtArcLength(length);
+    expect(fullLap.x).toBeCloseTo(atStart.x, 6);
+    expect(fullLap.y).toBeCloseTo(atStart.y, 6);
+    // ...and a lap plus a bit lands at that bit, rather than being clamped to
+    // the end the way an open spiral would be.
+    const past = wall.spiral.sampleAtArcLength(length + 5);
+    const five = wall.spiral.sampleAtArcLength(5);
+    expect(past.x).toBeCloseTo(five.x, 6);
+    expect(past.y).toBeCloseTo(five.y, 6);
+  });
+
+  it('keeps every normal pointing outward from the centre', () => {
+    const wall = buildWall(series, events, circle);
+    for (let i = 0; i < wall.spiral.samples.length; i += 31) {
+      const sample = wall.spiral.samples[i];
+      const radial = Math.hypot(sample.x, sample.y);
+      expect((sample.nx * sample.x + sample.ny * sample.y) / radial).toBeCloseTo(1, 2);
+    }
+  });
+
+  it('cuts one notch per event over the full window', () => {
+    const wall = buildWall(series, events, circle);
+    expect(wall.notches).toHaveLength(events.length);
+    expect(wall.droppedEvents).toHaveLength(0);
+  });
+
+  it('drops the turn-spacing check, which a ring has no neighbour for', () => {
+    const { checks } = runChecks(buildWall(series, events, circle), circle);
+    expect(checks.map((check) => check.id)).not.toContain('turnSpacing');
+    const spiralChecks = runChecks(buildWall(series, events, params), params).checks;
+    expect(spiralChecks.map((check) => check.id)).toContain('turnSpacing');
+  });
+
+  it('fails nothing at the defaults the site ships', () => {
+    const { checks } = runChecks(buildWall(series, events, circle), circle);
+    expect(checks.filter((check) => check.level === 'fail').map((c) => c.id)).toEqual([]);
   });
 });

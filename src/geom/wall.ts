@@ -26,6 +26,7 @@ import {
   type VolcanoEvent,
 } from '../data/series.js';
 import { makeClock, type Clock } from './clock.js';
+import { outerRadius } from './params.js';
 import {
   computeNotches,
   depthAt,
@@ -179,6 +180,10 @@ function signedVolume(positions: Float32Array, indices: Uint32Array): number {
  * shared between neighbouring quads, so every interior edge belongs to exactly
  * two triangles by construction. `validate.ts` checks that property rather than
  * trusting it.
+ *
+ * A spiral is capped at both ends. A ring has no ends: the last station joins
+ * back to the first and the caps are left off, which is what makes it a closed
+ * cylinder rather than a tube with two lids.
  */
 export function buildWallMesh(wall: Wall, params: Params, scale = 1): MeshData {
   const samples: SpiralSample[] = wall.spiral.samples;
@@ -212,8 +217,10 @@ export function buildWallMesh(wall: Wall, params: Params, scale = 1): MeshData {
   const OB = 0, OT = 1, IB = 2, IT = 3;
   const v = (station: number, corner: number) => station * 4 + corner;
 
-  for (let i = 0; i < n - 1; i += 1) {
-    const j = i + 1;
+  const closed = wall.spiral.closed;
+  const spans = closed ? n : n - 1;
+  for (let i = 0; i < spans; i += 1) {
+    const j = (i + 1) % n;
     // outer face
     indices.push(v(i, OB), v(j, OB), v(j, OT), v(i, OB), v(j, OT), v(i, OT));
     // inner face (opposite winding, it faces the other way)
@@ -224,10 +231,12 @@ export function buildWallMesh(wall: Wall, params: Params, scale = 1): MeshData {
     indices.push(v(i, IB), v(j, IB), v(j, OB), v(i, IB), v(j, OB), v(i, OB));
   }
 
-  // End caps.
-  indices.push(v(0, OB), v(0, OT), v(0, IT), v(0, OB), v(0, IT), v(0, IB));
-  const last = n - 1;
-  indices.push(v(last, IB), v(last, IT), v(last, OT), v(last, IB), v(last, OT), v(last, OB));
+  // End caps, for a spiral only: a ring has nothing to cap.
+  if (!closed) {
+    indices.push(v(0, OB), v(0, OT), v(0, IT), v(0, OB), v(0, IT), v(0, IB));
+    const last = n - 1;
+    indices.push(v(last, IB), v(last, IT), v(last, OT), v(last, IB), v(last, OT), v(last, OB));
+  }
 
   let indexArray = new Uint32Array(indices);
   let volume = signedVolume(positions, indexArray);
@@ -255,7 +264,7 @@ export function buildBaseDisc(
   segments = 256,
   scale = 1,
 ): MeshData {
-  const radius = (params.r1 + params.wallThickness) * scale;
+  const radius = (outerRadius(params) + params.wallThickness) * scale;
   const thickness = thicknessMm * scale;
   const positions = new Float32Array((segments * 2 + 2) * 3);
   const rim = (index: number, top: boolean) => (top ? index * 2 + 1 : index * 2);

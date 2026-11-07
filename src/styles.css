@@ -433,7 +433,17 @@ body {
 #timeline-svg {
   flex: 1 1 auto;
   min-height: 0;
-  cursor: ew-resize;
+  cursor: crosshair;
+}
+
+/* Over the window band the pointer says "this can be slid", everywhere else it
+   says "this can be clicked to place an edge". */
+#timeline-svg.over-window {
+  cursor: grab;
+}
+
+#timeline-svg.picking {
+  cursor: crosshair;
 }
 
 #timeline-svg svg {
@@ -513,6 +523,29 @@ body {
 .tl-moon-fill {
   fill: var(--muted);
   stroke: none;
+}
+
+.tl-window-edge {
+  stroke: var(--fg);
+  stroke-width: 1;
+  stroke-opacity: 0.55;
+  shape-rendering: crispEdges;
+}
+
+.tl-window-grip {
+  fill: var(--fg);
+  opacity: 0.28;
+}
+
+#timeline-svg.over-window .tl-window-grip {
+  opacity: 0.6;
+}
+
+.tl-window-pending {
+  stroke: var(--fg);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  shape-rendering: crispEdges;
 }
 
 .tl-cursor {

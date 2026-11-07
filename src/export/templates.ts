@@ -125,8 +125,11 @@ export function planSheet(wall: Wall, params: Params, series: Series, lang: Lang
   const samples = wall.spiral.samples;
   const half = (params.wallThickness / 2) * scale;
 
+  // A ring's outline has to be closed with Z, or the plotter leaves a gap at
+  // the seam where the last sample meets the first.
+  const close = wall.spiral.closed ? 'Z' : '';
   const polyline = (points: Array<[number, number]>, stroke: string, strokeWidth: number, dash = '') =>
-    `<path d="${points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${f(x)} ${f(y)}`).join('')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+    `<path d="${points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${f(x)} ${f(y)}`).join('')}${close}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
 
   const centerline: Array<[number, number]> = [];
   const outer: Array<[number, number]> = [];
@@ -206,9 +209,13 @@ ${titleBlock(MARGIN_MM, diameter + MARGIN_MM * 2 + 8, lang === 'es' ? 'PLANTA 1:
     lang === 'es'
       ? `Diámetro exterior en crudo ${(diameter).toFixed(1)} mm · espesor ${(params.wallThickness * scale).toFixed(1)} mm`
       : `Green outer diameter ${(diameter).toFixed(1)} mm · thickness ${(params.wallThickness * scale).toFixed(1)} mm`,
-    lang === 'es'
-      ? `Longitud de la línea central ${(wall.spiral.length * scale).toFixed(0)} mm · ${wall.spiral.turns.toFixed(2)} vueltas`
-      : `Centerline length ${(wall.spiral.length * scale).toFixed(0)} mm · ${wall.spiral.turns.toFixed(2)} turns`,
+    wall.spiral.closed
+      ? lang === 'es'
+        ? `Anillo cerrado · contorno ${(wall.spiral.length * scale).toFixed(0)} mm · una vuelta`
+        : `Closed ring · ${(wall.spiral.length * scale).toFixed(0)} mm around · one turn`
+      : lang === 'es'
+        ? `Longitud de la línea central ${(wall.spiral.length * scale).toFixed(0)} mm · ${wall.spiral.turns.toFixed(2)} vueltas`
+        : `Centerline length ${(wall.spiral.length * scale).toFixed(0)} mm · ${wall.spiral.turns.toFixed(2)} turns`,
   ])}`;
 
   return { id: 'plan', widthMm: width, heightMm: height, svg: svgRoot(width, height, body) };
@@ -322,11 +329,14 @@ export function wallStripSheet(
     const hourAtStart = wall.spiral.sampleAtArcLength(range.sStart).hourIndex;
     const hourAtEnd = wall.spiral.sampleAtArcLength(range.sEnd).hourIndex;
     const dates = `${shortDate(new Date(start + hourAtStart * HOUR_MS), lang)} – ${shortDate(new Date(start + hourAtEnd * HOUR_MS), lang)}`;
+    const joinsFirst = wall.spiral.closed && range.index === range.total;
     const joint =
       range.sEndWithTab > range.sEnd
         ? `<line x1="${f(sx(range.sEnd))}" y1="${f(sy(0))}" x2="${f(sx(range.sEnd))}" y2="${f(sy(maxHeight / scale))}" stroke="${FAINT}" stroke-width="0.3" stroke-dasharray="2 2"/>
     <text x="${f(sx(range.sEnd) + 1.5)}" y="${f(originY - 2)}" font-family="monospace" font-size="2.8" fill="${FAINT}">${lang === 'es' ? `junta ${range.index}/${range.total} · solape ${OVERLAP_MM} mm` : `joint ${range.index}/${range.total} · overlap ${OVERLAP_MM} mm`}</text>`
-        : '';
+        : joinsFirst
+          ? `<text x="${f(x1 - 2)}" y="${f(originY - 2)}" font-family="monospace" font-size="2.8" fill="${FAINT}" text-anchor="end">${lang === 'es' ? 'se une con la tira 1' : 'joins strip 1'}</text>`
+          : '';
 
     pieces.push(`
   <g>
@@ -353,6 +363,13 @@ ${titleBlock(
     lang === 'es'
       ? `x = longitud de arco, y = altura · solape ${OVERLAP_MM} mm`
       : `x = arc length, y = height · ${OVERLAP_MM} mm overlap`,
+    ...(wall.spiral.closed
+      ? [
+          lang === 'es'
+            ? `Anillo cerrado: la tira ${ranges.length} vuelve a unirse con la tira 1`
+            : `Closed ring: strip ${ranges.length} joins back to strip 1`,
+        ]
+      : []),
   ],
 )}`;
 

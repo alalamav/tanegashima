@@ -21,6 +21,7 @@ import {
 } from './data/series.js';
 import { turnGuidance } from './geom/advice.js';
 import { configHash, paramsFromHash, paramsToHash, type Params } from './geom/params.js';
+import { resolveWindow } from './geom/clock.js';
 import { measure, runChecks, type CheckFix } from './geom/validate.js';
 import { buildWall, type Wall } from './geom/wall.js';
 import { exportPng } from './export/png.js';
@@ -36,7 +37,7 @@ import { buildSpec, exportSpecJson } from './export/spec.js';
 import { createPanel, type ExportKind } from './ui/panel.js';
 import { createScene, type ViewPreset } from './ui/scene.js';
 import { createTimeline } from './ui/timeline2d.js';
-import { attachScrubber } from './ui/scrubber.js';
+import { attachScrubber, shiftWindow, windowFromPicks } from './ui/scrubber.js';
 import { precisionLabel, shortDate, t, timeInZone, type Lang } from './i18n/strings.js';
 import { helpText, type HelpContext } from './i18n/help.js';
 import { createTooltipHost } from './ui/tooltip.js';
@@ -81,6 +82,10 @@ async function main(): Promise<void> {
   const flags = { transparentPng: false, greenMesh: false };
   let cursorHourIndex: number | null = null;
   let activeEventId: string | null = null;
+  /** First edge of a window being picked on the strip, if any. */
+  let pendingWindowStart: number | null = null;
+  /** The window as it stood when a drag of the window band began. */
+  let windowDragBase: { i0: number; i1: number } | null = null;
   let wall: Wall = buildWall(series, events, params);
 
   // ---- elements ---------------------------------------------------------
@@ -412,7 +417,7 @@ async function main(): Promise<void> {
     drawChecks();
     drawEvents();
     drawProvenance();
-    timeline.update({ params, cursorHourIndex, activeEventId, lang: params.lang });
+    timeline.update({ params, cursorHourIndex, activeEventId, pendingWindowStart, lang: params.lang });
     if (cursorHourIndex !== null) {
       const { i0, i1 } = wall.clock.window;
       if (cursorHourIndex >= i0 && cursorHourIndex <= i1) {
@@ -536,6 +541,21 @@ async function main(): Promise<void> {
   });
 
   // ---- scrubbing --------------------------------------------------------
+  const totalHours = series.arrays.t.length;
+  const hourToIso = (hour: number): string =>
+    new Date(Date.parse(series.window.startUtc) + Math.round(hour) * HOUR_MS).toISOString();
+
+  const setWindow = (
+    startHour: number,
+    endHour: number,
+    options: { pushHistory?: boolean; refreshPanel?: boolean } = {},
+  ): void => {
+    params.windowStartUtc = hourToIso(startHour);
+    params.windowEndUtc = hourToIso(endHour);
+    if (options.refreshPanel !== false) panel.refresh();
+    rebuild(options.pushHistory === true);
+  };
+
   attachScrubber(timelineContainer, {
     onScrub: (hourIndex) => {
       cursorHourIndex = hourIndex;
@@ -548,6 +568,69 @@ async function main(): Promise<void> {
       drawAll();
     },
     hourIndexAtClientX: timeline.hourIndexAtClientX,
+
+    isInsideWindow: (hourIndex) => {
+      const { i0, i1 } = resolveWindow(series, params);
+      return hourIndex >= i0 && hourIndex <= i1;
+    },
+    isPicking: () => pendingWindowStart !== null,
+
+    // First click plants an edge, second click completes the window. Picking
+    // the window is two clicks rather than a drag so that dragging stays free
+    // for sliding the window that is already there.
+    onPick: (hourIndex) => {
+      if (pendingWindowStart === null) {
+        pendingWindowStart = Math.round(hourIndex);
+        timelineContainer.classList.add('picking');
+        setStatus(t('pickEnd', params.lang));
+        drawAll();
+        return;
+      }
+      const { startHour, endHour } = windowFromPicks(pendingWindowStart, hourIndex, totalHours);
+      pendingWindowStart = null;
+      timelineContainer.classList.remove('picking');
+      setStatus('');
+      setWindow(startHour, endHour, { pushHistory: true });
+    },
+
+    onWindowDragStart: () => {
+      windowDragBase = resolveWindow(series, params);
+      // Hold the URL still for the duration: rewriting it on every frame of a
+      // drag churns history and makes the browser think the page navigated.
+      suppressHashSync = true;
+    },
+    onWindowDrag: (deltaHours) => {
+      if (!windowDragBase) return;
+      const { startHour, endHour } = shiftWindow(
+        windowDragBase.i0,
+        windowDragBase.i1,
+        deltaHours,
+        totalHours,
+      );
+      // The panel's date fields are rebuilt once at the end rather than on
+      // every frame; the strip and the piece follow the drag live.
+      setWindow(startHour, endHour, { refreshPanel: false });
+    },
+    onWindowDragEnd: () => {
+      windowDragBase = null;
+      // The panel refresh has to happen while the URL is still held: its change
+      // events would otherwise replaceState the entry we are about to push on
+      // top of, leaving Back with two identical entries and nothing to undo.
+      panel.refresh();
+      suppressHashSync = false;
+      // One history entry for the whole drag, not one per frame.
+      syncHash(true);
+    },
+    onHoverWindow: (inside) => {
+      timelineContainer.classList.toggle('over-window', inside && pendingWindowStart === null);
+    },
+  });
+
+  timelineContainer.addEventListener('scrub-cancel', () => {
+    pendingWindowStart = null;
+    timelineContainer.classList.remove('picking');
+    setStatus('');
+    drawAll();
   });
 
   timelineContainer.addEventListener('scrub-step', (event) => {
@@ -587,6 +670,7 @@ async function main(): Promise<void> {
       series,
       events,
       meta,
+      scene,
       runExport,
       async probe() {
         const sheets = [

@@ -19,7 +19,7 @@
  */
 
 import { M2_PERIOD_HOURS } from './validate.js';
-import type { Params } from './params.js';
+import { isSpiral, type Params } from './params.js';
 
 /** Arc length of a spiral of `turns` turns between two radii, mm. */
 export function approximateLength(r0: number, r1: number, turns: number): number {
@@ -69,8 +69,13 @@ export interface TurnGuidance {
   requiredSpanMm: number;
   /** r₁ that would satisfy the turn-spacing check at the current turns, mm. */
   suggestedR1Mm: number;
-  /** Largest r₁ the kiln will take, mm. */
-  maxR1Mm: number;
+  /**
+   * Largest outer radius the kiln will take, mm. That is r₁ for a spiral and
+   * r₀ for a ring, since the ring has no r₁.
+   */
+  maxOuterRadiusMm: number;
+  /** Ring radius that would make the circumference long enough, mm. */
+  requiredRingRadiusMm: number;
   /** Centerline length the minimum-feature check needs, mm. */
   requiredLengthMm: number;
 }
@@ -81,7 +86,8 @@ export interface TurnGuidance {
  */
 export function turnGuidance(params: Params, turns: number, hours: number): TurnGuidance {
   const pitch = params.wallThickness + params.clearanceMm;
-  const radialSpan = params.r1 - params.r0;
+  // A ring has no radial span to share out; the turn bracket does not apply.
+  const radialSpan = isSpiral(params.clockMode) ? params.r1 - params.r0 : 0;
 
   // One M2 cycle must be at least minFeature wide:
   //   length · M2 / hours ≥ minFeature   ⇒   length ≥ minFeature · hours / M2
@@ -97,7 +103,9 @@ export function turnGuidance(params: Params, turns: number, hours: number): Turn
     radialSpanMm: radialSpan,
     requiredSpanMm: Math.abs(turns) * pitch,
     suggestedR1Mm: params.r0 + Math.abs(turns) * pitch,
-    maxR1Mm: (params.kilnLimitMm * (1 - params.shrinkagePct / 100)) / 2 - params.wallThickness / 2,
+    maxOuterRadiusMm:
+      (params.kilnLimitMm * (1 - params.shrinkagePct / 100)) / 2 - params.wallThickness / 2,
+    requiredRingRadiusMm: requiredLength / (2 * Math.PI),
     requiredLengthMm: requiredLength,
   };
 }

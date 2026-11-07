@@ -9,16 +9,23 @@ const series = JSON.parse(readFileSync('public/data/series.json', 'utf8')) as Se
 const events = JSON.parse(readFileSync('public/data/events.json', 'utf8')) as VolcanoEvent[];
 const checksOf = (params: Params) => runChecks(buildWall(series, events, params), params).checks;
 
+const SPIRAL: Partial<Params> = { clockMode: 'synodic', r0: 30, r1: 140 };
+
 const cases: Array<[string, Partial<Params>]> = [
-  ['defaults (synodic)', {}],
-  ['springNeap', { clockMode: 'springNeap' }],
-  ['linear 12 turns', { clockMode: 'linear', linearTurns: 12 }],
-  ['linear 0.5 turns', { clockMode: 'linear', linearTurns: 0.5 }],
-  ['r1 = 400', { r1: 400 }],
-  ['k = 1.0', { k: 1 }],
-  ['r0 > r1', { r0: 140, r1: 30 }],
-  ['short window', SHORT_WINDOW_PRESET],
-  ['short window, tiny radii', { ...SHORT_WINDOW_PRESET, r0: 8, r1: 20 }],
+  ['circle defaults', {}],
+  ['circle, tiny ring', { r0: 20 }],
+  ['circle, past the kiln', { r0: 200 }],
+  ['spiral defaults', SPIRAL],
+  ['springNeap', { ...SPIRAL, clockMode: 'springNeap' }],
+  ['springNeap at ring radii', { clockMode: 'springNeap', r0: 160, r1: 260 }],
+  ['linear 12 turns', { ...SPIRAL, clockMode: 'linear', linearTurns: 12 }],
+  ['linear 12 at ring radii', { clockMode: 'linear', linearTurns: 12, r0: 160, r1: 260 }],
+  ['linear 0.5 turns', { ...SPIRAL, clockMode: 'linear', linearTurns: 0.5 }],
+  ['r1 = 400', { ...SPIRAL, r1: 400 }],
+  ['k = 1.0', { ...SPIRAL, k: 1 }],
+  ['r0 > r1', { ...SPIRAL, r0: 140, r1: 30 }],
+  ['short window', { ...SPIRAL, ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 }],
+  ['short window, tiny radii', { ...SPIRAL, ...SHORT_WINDOW_PRESET, r0: 8, r1: 20 }],
 ];
 
 for (const [name, patch] of cases) {

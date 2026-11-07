@@ -9,7 +9,12 @@
 
 import type { SignalName } from '../data/series.js';
 
-export type ClockMode = 'synodic' | 'springNeap' | 'linear';
+export type ClockMode = 'circle' | 'synodic' | 'springNeap' | 'linear';
+
+/** True for the modes that wind outward; false for the closed ring. */
+export function isSpiral(mode: ClockMode): boolean {
+  return mode !== 'circle';
+}
 export type PageSize = 'A4' | 'A3' | 'Letter';
 
 export interface Params {
@@ -24,9 +29,12 @@ export interface Params {
   windowEndUtc: string;
 
   // ---- spiral, mm --------------------------------------------------------
-  /** Radius at the window start. */
+  /**
+   * Radius at the window start — and, in circle mode, the radius of the whole
+   * ring, since there is nowhere for it to grow to.
+   */
   r0: number;
-  /** Radius at the window end. */
+  /** Radius at the window end. Unused, and disabled in the panel, in circle mode. */
   r1: number;
   /** Plan rotation in degrees; the default points new moon at the viewer. */
   thetaRefDeg: number;
@@ -76,13 +84,19 @@ export interface Params {
 }
 
 export const DEFAULT_PARAMS: Params = {
-  clockMode: 'synodic',
+  clockMode: 'circle',
   linearTurns: 3.25,
   windowStartUtc: '1999-09-26T00:00:00.000Z',
   windowEndUtc: '1999-12-31T23:00:00.000Z',
 
-  r0: 30,
-  r1: 140,
+  // A closed ring and an outward spiral want very different radii: the ring has
+  // one turn to fit the whole record into, so it has to be wide, while the
+  // spiral has to stay small enough that three turns of wall are still a
+  // buildable length. r0 is the ring's radius and the spiral's inner radius, so
+  // it is set for the default mode; switching to a spiral mode will raise
+  // checks, each with a one-click fix.
+  r0: 160,
+  r1: 260,
   // Plan y points away from the default camera, so -90 deg puts phase 0
   // (new moon) toward the viewer.
   thetaRefDeg: -90,
@@ -155,19 +169,30 @@ function clampToRange(key: RangedParam, value: number): number {
 }
 
 /**
+ * Nudge away a floating-point hair before rounding to a step.
+ *
+ * 0.7 / 0.05 is 13.999999999999998 in binary floating point, so a bare
+ * Math.floor turns an already-snapped 0.7 into 0.65 — which makes snapping
+ * non-idempotent and lets a one-click fix drift a step every time it is
+ * recomputed. A tolerance of a millionth of a step is far below any value
+ * these parameters carry and far above the error.
+ */
+const STEP_EPSILON = 1e-6;
+
+/**
  * Round a value UP to the parameter's own step: for a limit the value must stay
  * above, so that snapping can only ever move it further inside.
  */
 export function snapUp(key: RangedParam, value: number): number {
   const { step } = PARAM_RANGES[key];
-  const snapped = Math.ceil(clampToRange(key, value) / step) * step;
+  const snapped = Math.ceil(clampToRange(key, value) / step - STEP_EPSILON) * step;
   return Number(clampToRange(key, snapped).toFixed(decimalsOf(step)));
 }
 
 /** Round a value DOWN to the parameter's own step, for a ceiling. */
 export function snapDown(key: RangedParam, value: number): number {
   const { step } = PARAM_RANGES[key];
-  const snapped = Math.floor(clampToRange(key, value) / step) * step;
+  const snapped = Math.floor(clampToRange(key, value) / step + STEP_EPSILON) * step;
   return Number(clampToRange(key, snapped).toFixed(decimalsOf(step)));
 }
 
@@ -175,9 +200,20 @@ export function snapDown(key: RangedParam, value: number): number {
 export const SHORT_WINDOW_PRESET: Partial<Params> = {
   windowStartUtc: '1999-09-26T00:00:00.000Z',
   windowEndUtc: '1999-10-15T23:00:00.000Z',
-  r0: 40,
-  r1: 110,
 };
+
+/**
+ * The radius of the outermost wall, which is what the kiln has to take: the ring
+ * radius in circle mode, the end of the spiral otherwise.
+ */
+export function outerRadius(params: Params): number {
+  return isSpiral(params.clockMode) ? params.r1 : params.r0;
+}
+
+/** The parameter that `outerRadius` reads, for advice that wants to change it. */
+export function outerRadiusKey(params: Params): 'r0' | 'r1' {
+  return isSpiral(params.clockMode) ? 'r1' : 'r0';
+}
 
 /** Shrinkage factor: green size = fired size / (1 - shrinkage). */
 export function greenScale(params: Params): number {

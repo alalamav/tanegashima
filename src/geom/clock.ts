@@ -4,6 +4,13 @@
  * Three modes, all returning an UNWRAPPED angle in radians so the spiral's
  * radius can be driven by the same number:
  *
+ *   circle       theta runs once around, so the wall closes into a cylinder
+ *                instead of winding outward. The angle is still lunar-paced —
+ *                it is the elapsed moon phase, scaled so the window covers
+ *                exactly one turn — so a window of one synodic month IS the
+ *                lunar phase, with new moon at the seam, and a longer window is
+ *                the same progression compressed into one turn. The radius is
+ *                constant at r0; r1 has nowhere to grow to and is ignored.
  *   synodic      theta = unwrapped moon phase. One turn = one synodic month.
  *                New moons land at 0 deg, full moons at 180 deg. Because the
  *                Moon's angular speed varies by about +/-12% over its orbit,
@@ -33,6 +40,8 @@ export interface ClockWindow {
 
 export interface Clock {
   mode: ClockMode;
+  /** True when the first and last samples join: a ring rather than a spiral. */
+  closed: boolean;
   window: ClockWindow;
   /** Unwrapped angle in radians at a (possibly fractional) hour index. */
   thetaAt(hourIndex: number): number;
@@ -77,6 +86,17 @@ export function makeClock(series: Series, params: Params): Clock {
 
   let thetaAt: (hourIndex: number) => number;
   switch (params.clockMode) {
+    case 'circle': {
+      // Close the ring on the hour AFTER the last sample, so the step from the
+      // last sample back to the first is one hour like every other step and no
+      // sample is drawn twice.
+      const lastStep = phaseDegAt(series, i1) - phaseDegAt(series, i1 - 1);
+      const phaseWrap = phaseDegAt(series, i1) + lastStep;
+      const span = phaseWrap - phaseStart;
+      thetaAt = (hourIndex) =>
+        span === 0 ? 0 : ((phaseDegAt(series, hourIndex) - phaseStart) / span) * 2 * Math.PI;
+      break;
+    }
     case 'synodic':
       thetaAt = (hourIndex) => (phaseDegAt(series, hourIndex) - phaseStart) * DEG;
       break;
@@ -93,14 +113,18 @@ export function makeClock(series: Series, params: Params): Clock {
 
   const thetaStart = thetaAt(i0);
   const thetaEnd = thetaAt(i1);
+  const closed = params.clockMode === 'circle';
 
   return {
     mode: params.clockMode,
+    closed,
     window,
     thetaAt,
     thetaStart,
     thetaEnd,
-    turns: (thetaEnd - thetaStart) / (2 * Math.PI),
+    // A closed ring is one turn by definition; thetaEnd stops one hour short of
+    // 2 pi, which would otherwise read as slightly less than a full turn.
+    turns: closed ? 1 : (thetaEnd - thetaStart) / (2 * Math.PI),
     wrappedDegAt: (hourIndex) => {
       // Report the real lunar phase regardless of mode, so the readout never
       // lies about where the Moon was.

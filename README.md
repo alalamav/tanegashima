@@ -15,7 +15,7 @@ the form shows it. It does not explain it, and no causal relation is claimed.**
 | Dimension | Quantity | Detail |
 | --- | --- | --- |
 | **Angle θ** | the Moon | each hour sits at its lunar phase angle; 0° = new moon, 180° = full. One turn = one synodic month (~29.53 d). |
-| **Radius r** | elapsed time | grows linearly with θ, so turns are evenly spaced. 26 Sep – 31 Dec 1999 is 3.29 turns. |
+| **Radius r** | elapsed time | grows linearly with θ, so turns are evenly spaced — or stays constant in circle mode, where the wall closes into a cylinder. |
 | **Wall height h** | observed sea level | Tanegashima station TJ, hourly, JMA original record. |
 | **Red notches** | eruptions | cut into the top edge at the exact UTC instant, deeper for a taller plume. |
 
@@ -264,16 +264,58 @@ All model dimensions are **fired** sizes in mm. Shrinkage is applied only at exp
 
 ### Clock — `src/geom/clock.ts`
 
-| Mode | θ(t) | Turns, 26 Sep – 31 Dec | What lines up |
-| --- | --- | --- | --- |
-| **Synodic** (default) | unwrapped moon phase | 3.29 | new moons at 0°, full moons at 180° |
-| Spring–neap | 2 × unwrapped phase | 6.59 | new *and* full moon both at 0° |
-| Linear | uniform in time | user-set | nothing — the control version |
+| Mode | θ(t) | Turns, 26 Sep – 31 Dec | Radius | What lines up |
+| --- | --- | --- | --- | --- |
+| **Circle** (default) | lunar phase, scaled to one turn | 1 | constant, r₀ | the seam; a one-lunation window puts new moon on it |
+| Synodic | unwrapped moon phase | 3.29 | r₀ → r₁ | new moons at 0°, full moons at 180° |
+| Spring–neap | 2 × unwrapped phase | 6.59 | r₀ → r₁ | new *and* full moon both at 0° |
+| Linear | uniform in time | user-set | r₀ → r₁ | nothing — the control version |
 
 The Moon's angular speed varies by about ±12% over its orbit, so synodic mode is
 slightly uneven in time. That unevenness is the Moon's, not an error, and it is
 kept. Whatever the mode, the readout always reports the *real* lunar phase, so the
 interface never lies about where the Moon was.
+
+### Circle mode — the closed cylinder
+
+The site opens on circle mode: one turn, constant radius, and the two ends of the
+wall joined, so the piece is a closed cylinder rather than an outward spiral. r₁
+has nowhere to grow to, so it is ignored and the panel disables it; r₀ alone sets
+the size.
+
+The angle is still lunar. It is the elapsed moon phase, scaled so the window
+covers exactly one turn — which means a window of **one synodic month is
+literally the lunar phase**, with new moon on the seam, and a longer window is
+the same progression compressed into a single turn. The readout reports the true
+phase either way.
+
+Closing the loop is a real change to the geometry, not a cosmetic one:
+
+- The angle wraps on the hour *after* the last sample, so the step from the last
+  station back to the first is one hour like every other step and no sample is
+  drawn twice.
+- The Catmull-Rom spline indexes its control points modulo the count instead of
+  clamping at the ends, and the arc-length resampler leaves out the station at
+  `s = length`, which is the station at `s = 0`.
+- Arc length becomes modular: `sampleAtArcLength(length + 5)` is the sample 5 mm
+  past the seam, not the clamped end of a spiral.
+- The mesh wraps the quad strip from the last station to the first and leaves off
+  the end caps.
+
+A tube bent into a ring is a torus, so the closed wall has **Euler characteristic
+0** where the spiral has 2 — and `tests/geometry.test.ts` asserts exactly that,
+along with watertightness, for both. At the defaults the ring is 16 240 triangles,
+320.8 cm³, with no boundary and no non-manifold edges.
+
+The turn-spacing check is left out entirely in circle mode: one turn has no
+neighbour to be spaced from.
+
+**A ring and a spiral want very different radii.** The ring has one turn to fit
+the whole record into, so it has to be wide; the spiral has to stay small enough
+that three turns of wall are a buildable length. r₀ serves both, so it is set for
+the default mode (160 mm, a 326 mm fired cylinder). Switching to a spiral mode
+raises checks, each with a one-click fix — including a *lower r₀* lever for when
+the kiln will not allow a wider r₁.
 
 **The turns are only yours in linear mode.** In synodic and spring–neap the window
 sets them, so the `turns` slider is disabled there — it would otherwise look live
@@ -297,7 +339,8 @@ At the default window and radii (r₀ = 30, r₁ = 140, 6 mm wall, 12 mm clearan
 
 | Configuration | Turns | Length | Turn spacing | Tide wavelength | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| **Synodic, defaults** | 3.29 | 1.76 m | 33.4 mm | 9.4 mm | passes; long to build |
+| **Circle, defaults** | 1 | 1.005 m | n/a | 5.4 mm | the shipped default; tide getting fine |
+| Synodic, r₀ = 30, r₁ = 140 | 3.29 | 1.76 m | 33.4 mm | 9.4 mm | passes; long to build |
 | Spring–neap, default radii | 6.59 | 3.52 m | **16.7 mm** | 18.9 mm | **fails**: turns crowd |
 | Spring–neap, r₁ = 149 | 6.59 | 3.71 m | 18.1 mm | 19.9 mm | spacing fixed, 3.7 m of wall |
 | **Spring–neap, short window** | 1.36 | 0.64 m | 51.5 mm | 16.7 mm | the one worth building |
@@ -381,14 +424,20 @@ reported in `clampedNotches` and flagged in the panel rather than silently thinn
 
 Live in the panel, and carried into the spec sheet.
 
-| Check | Rule | At defaults | Lever when it fails |
+| Check | Rule | At the circle defaults | Lever when it fails |
 | --- | --- | --- | --- |
-| Turn spacing | ≥ t_wall + clearance (6 + 12 mm) | **33.4 mm** ✓ | r₁, clearance, turns |
-| Green diameter | fired ÷ (1 − shrinkage) ≤ kiln limit | **325.0 mm** ≤ 400 ✓ | r₁, shrinkage, kiln limit |
-| Tide wavelength | one M2 cycle ≈ length × 12.42 / window hours, ≥ min feature | **9.4 mm** ≥ 5 ✓ | radii, turns, window, smoothing |
-| Wall height | between h_base and the maximum | **10.0 – 82.6 mm** ≤ 90 ✓ | k, h_base, maximum height |
-| Wall length | handwork budget | **1.76 m** — warn | window, radii, turns |
+| Turn spacing | ≥ t_wall + clearance (6 + 12 mm) | *not shown — a ring has no neighbouring turn* | r₁, r₀, clearance, turns |
+| Green diameter | fired ÷ (1 − shrinkage) ≤ kiln limit | **370.5 mm** ≤ 400 ✓ | the outer radius, shrinkage, kiln limit |
+| Tide wavelength | one M2 cycle ≈ length × 12.42 / window hours, ≥ min feature | **5.4 mm** ≥ 5 — warn | radius, turns, window, smoothing |
+| Wall height | between h_base and the maximum | **10.5 – 82.2 mm** ≤ 90 ✓ | k, h_base, maximum height |
+| Wall length | handwork budget | **1.005 m** ≤ 1.2 ✓ | window, radii, turns |
 | Notches | none clamped | 5 of 5 ✓ | depth per km, d₀, k, h_base |
+| Eruptions in the window | all of them get a notch | 5/5 ✓ | the window dates — no button |
+
+The default carries one amber warning, and it is an honest one: 97 days wrapped
+once around a 326 mm cylinder puts one tidal cycle in 5.4 mm of arc. The kiln
+caps the ring at r₀ = 173 mm, so no radius clears the check at this window
+length — the fix offered is to shorten the window instead, and it says so.
 
 **A failing check says what to change, to what, and will do it for you.** Every
 limit is a one-line inequality, so `advice.ts` solves each one for the parameter
@@ -489,11 +538,26 @@ becomes a scrollable strip and the panel starts folded away.
   hours are shaded, hours outside the current window are dimmed, new and full moons
   are glyphs along the top, eruptions are red verticals (and red bands for the
   day-precision pair).
-- **Scrubber** — drag anywhere along the strip, or use ←/→ and PgUp/PgDn after
-  focusing it. A blade follows the spiral and the readout shows UTC, Quito (UTC−5)
-  and Tanegashima (UTC+9) time, sea elevation, anomaly, moon phase and illumination,
-  wall height, position along the wall, the nearest eruption, and whether the hour
-  was observed or reconstructed.
+- **Scrubber and window selector** — the strip does three jobs at once, told
+  apart by what the pointer does rather than by a mode switch:
+  - **Hover** travels the piece. A blade follows the wall and the readout shows
+    UTC, Quito (UTC−5) and Tanegashima (UTC+9) time, sea elevation, anomaly, moon
+    phase and illumination, wall height, position along the wall, the nearest
+    eruption, and whether the hour was observed or reconstructed. Looking changes
+    nothing. ←/→ and PgUp/PgDn do the same from the keyboard.
+  - **Click the start, then click the end** to set the window. The first click
+    plants a dashed edge and the readout line says what to do next; Escape backs
+    out. The window is never allowed below 24 h, and a pair of picks closer than
+    that grows around the midpoint rather than snapping to one side.
+  - **Drag inside the window** to slide it along the record, keeping its length.
+    The window's own edges and a grip bar along its top make the draggable band
+    explicit, and the cursor changes over it.
+
+  A click is a press and release that travelled less than 4 px, so it can never
+  be confused with a drag. Drag updates are coalesced to one per animation frame
+  — rebuilding the wall on every `pointermove` would do the same work three or
+  four times a frame — and the URL is held still for the duration, so a drag
+  leaves exactly one history entry and Back undoes the whole move.
 - **Events list** — click one and the camera eases to its notch (300–600 ms ease-out,
   skipped under `prefers-reduced-motion`); the card gives the source, the precision
   and the plume height.
@@ -574,7 +638,7 @@ always be matched. Filenames are `two-clocks_<what>_<hash>.<ext>`.
 npm test
 ```
 
-175 tests in six files.
+188 tests in six files.
 
 - `parseJma.test.ts` (20) — file shape, missing-value counts, every hand-read value
   from the brief, the daily-range extremes, extremum blocks, and the error paths:
@@ -588,11 +652,15 @@ npm test
 - `moon.test.ts` (16) — the phase convention, all seven PyEphem reference instants
   to ±5 min, unwrapping forwards and backwards, ~360° per synodic month over the real
   series, and the phase labels.
-- `geometry.test.ts` (46) — the built data's own invariants, the three clock modes,
+- `geometry.test.ts` (59) — the built data's own invariants, the three clock modes,
   arc-length resampling and forced sample positions, notch depths and widths, vertical
   notch sides, "cuts only inside notches and nowhere else", **watertightness and Euler
   characteristic 2**, green-size scaling, the fabrication checks passing at defaults
   and failing when they should, the short-window preset, and URL-hash round-tripping.
+  Circle mode gets its own block: one turn whatever the window, a constant radius
+  that ignores r₁ entirely, 2πr₀ around, no duplicated sample at the seam, arc
+  length that wraps rather than clamps, outward normals, a watertight torus of
+  Euler characteristic 0, and the turn-spacing check correctly absent.
 - `export.test.ts` (35) — STL byte layout, triangle count, unit normals and bounds;
   strips summing back to the centerline within 0.5 mm with no gaps and a 10 mm tab on
   all but the last; SVG mm units matching the viewBox 1:1, the 100 mm square, the
@@ -601,7 +669,8 @@ npm test
   to within 1%; the turn bracket; that advice is present exactly when a check is not
   passing and always names a number; and, for each lever in turn, that **the number
   the warning printed makes that check pass when fed back in**. The one-click fixes
-  are checked against eleven broken configurations for all five rules above —
+  are checked against thirteen broken configurations, circle and spiral, for all
+  five rules above —
   clears its own check, breaks no green one, cascades at most one warning, lands on
   a value the sliders can hold (including a round trip through their rounding), and
   is idempotent. Plus the help registry: an entry for every control the panel wires
@@ -633,7 +702,7 @@ src/geom/              params.ts (incl. PARAM_RANGES)  clock.ts  spiral.ts
 src/export/            png.ts  mesh.ts  templates.ts  pdf.ts  spec.ts  download.ts
 src/ui/                scene.ts  timeline2d.ts  scrubber.ts  panel.ts  tooltip.ts
 src/i18n/              strings.ts (interface)  help.ts (tooltips)
-tests/                 six suites, 175 tests
+tests/                 six suites, 188 tests
 ```
 
 Stack: Vite + TypeScript, three.js (OrbitControls, GLTFExporter), `postprocessing`
@@ -659,6 +728,14 @@ jsPDF + svg2pdf.js, `@fontsource` (Inter, JetBrains Mono), Vitest, `tsx`.
 - **The datum is verified, the station position is approximate.** The latitude and
   longitude in `series.json` are Tanegashima's tide station to about a hundred metres;
   nothing in the geometry depends on them.
+- **A ring and a spiral need different radii.** r₀ is both the ring's radius and
+  the spiral's inner radius, and the two want values an order apart. There is no
+  single default that suits both, so the default suits circle mode and switching
+  to a spiral raises checks with fixes rather than silently resizing the piece.
+- **A ring cannot be both long in time and coarse in the clay.** The kiln caps
+  the radius at r₀ = 173 mm, which is 1 087 mm around; at 97 days that is a
+  5.8 mm tidal cycle at best. A circle that clears the minimum-feature check
+  comfortably wants a window of about two months or less.
 - **Framing.** The site says, in Spanish and English, that the Moon alignment is
   *shown*, not explained. Four of the five eruptions fall between 318° and 32° — within
   about 75° of new moon — and the fifth at 187°, near full. That is five events. It is

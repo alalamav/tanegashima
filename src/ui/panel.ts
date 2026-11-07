@@ -9,6 +9,7 @@ import type { BladeApi, FolderApi } from '@tweakpane/core';
 
 import {
   DEFAULT_PARAMS,
+  isSpiral,
   PARAM_RANGES,
   SHORT_WINDOW_PRESET,
   type Params,
@@ -59,9 +60,10 @@ export function createPanel(
   callbacks: PanelCallbacks,
 ): PanelHandle {
   let pane: Pane | null = null;
-  /** The turns slider is only live in linear mode; kept here so it can be
-   *  re-disabled whenever the clock mode changes. */
+  /** Controls that only apply to some clock modes, kept so they can be
+   *  re-disabled whenever the mode changes. */
   let turnsBinding: BladeApi | null = null;
+  let outerRadiusBinding: BladeApi | null = null;
 
   // Dates are edited as plain YYYY-MM-DD text; the hours come from the series.
   const dates = {
@@ -99,14 +101,18 @@ export function createPanel(
      *  snap their proposed values to. */
     const range = (key: RangedParam, label: string) => ({ label, ...PARAM_RANGES[key] });
 
-    /** The turns slider does nothing outside linear mode, so it is disabled
-     *  there rather than left to look live and respond to nothing. */
-    const syncTurnsEnabled = (): void => {
+    /**
+     * Controls that the current mode does not read are disabled rather than
+     * left to look live and respond to nothing: the turns outside linear mode,
+     * and r₁ in circle mode, where the ring has nowhere to grow to.
+     */
+    const syncModeEnabled = (): void => {
       if (turnsBinding) turnsBinding.disabled = params.clockMode !== 'linear';
+      if (outerRadiusBinding) outerRadiusBinding.disabled = !isSpiral(params.clockMode);
     };
 
     const changed = () => {
-      syncTurnsEnabled();
+      syncModeEnabled();
       callbacks.onChange();
     };
 
@@ -117,6 +123,7 @@ export function createPanel(
         .addBinding(params, 'clockMode', {
           label: t('clockMode', lang),
           options: {
+            [t('circle', lang)]: 'circle',
             [t('synodic', lang)]: 'synodic',
             [t('springNeap', lang)]: 'springNeap',
             [t('linear', lang)]: 'linear',
@@ -131,7 +138,6 @@ export function createPanel(
         .on('change', changed),
       'linearTurns',
     );
-    syncTurnsEnabled();
     withHelp(clock.addBinding(dates, 'start', { label: t('windowStart', lang) }).on('change', applyDates), 'windowStart');
     withHelp(clock.addBinding(dates, 'end', { label: t('windowEnd', lang) }).on('change', applyDates), 'windowEnd');
     withHelp(clock.addButton({ title: t('shortWindow', lang) }), 'shortWindow').on('click', () => {
@@ -155,7 +161,11 @@ export function createPanel(
     // ---- spiral ---------------------------------------------------------
     const spiral = pane.addFolder({ title: t('spiral', lang), expanded: false });
     withHelp(spiral.addBinding(params, 'r0', range('r0', t('r0', lang))).on('change', changed), 'r0');
-    withHelp(spiral.addBinding(params, 'r1', range('r1', t('r1', lang))).on('change', changed), 'r1');
+    outerRadiusBinding = withHelp(
+      spiral.addBinding(params, 'r1', range('r1', t('r1', lang))).on('change', changed),
+      'r1',
+    );
+    syncModeEnabled();
     withHelp(
       spiral
         .addBinding(params, 'thetaRefDeg', range('thetaRefDeg', t('thetaRef', lang)))
@@ -323,6 +333,7 @@ export function createPanel(
       dates.start = isoDay(params.windowStartUtc);
       dates.end = isoDay(params.windowEndUtc);
       if (turnsBinding) turnsBinding.disabled = params.clockMode !== 'linear';
+      if (outerRadiusBinding) outerRadiusBinding.disabled = !isSpiral(params.clockMode);
       pane?.refresh();
     },
     dispose: () => {

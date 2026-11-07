@@ -30,21 +30,31 @@ const n = (value: number, decimals = 1): string =>
 
 export const HELP: Record<string, HelpEntry> = {
   // ---------------------------------------------------------------- clock
-  clockMode: ({ guidance, measures }) => ({
+  clockMode: ({ guidance, measures, params }) => ({
     es: `De dónde sale el ángulo de cada hora. Es la decisión de la que cuelga todo lo demás.
 
+• Círculo — una sola vuelta, así que el muro se cierra sobre sí mismo y forma un cilindro en vez de una espiral. El radio es r₀ y r₁ queda desactivado. El ángulo sigue siendo lunar: es la fase recorrida, escalada para que la ventana dé exactamente una vuelta, de modo que una ventana de un mes sinódico ES la fase de la luna, con luna nueva en la junta.
 • Sinódico — ángulo = fase lunar sin envolver. Una vuelta = un mes sinódico (~29,5 días). Lunas nuevas a 0°, llenas a 180°. Las vueltas las fija la ventana, no usted: ahora ${n(measures.turns, 2)}.
 • Sicigias — ángulo = 2 × fase. Luna nueva y llena caen las dos a 0°, así que las dos mareas vivas del mes coinciden en dirección. Da el doble de vueltas y el doble de muro.
 • Lineal — ángulo uniforme en el tiempo, con las vueltas puestas a mano. No alinea nada: es la versión de control contra la que se compara.
 
-Con los radios y la ventana de ahora caben entre ${n(guidance.minTurns, 2)} y ${n(guidance.maxTurns, 2)} vueltas. Si un modo se sale de ese rango, ensanche r₁ − r₀ o acorte la ventana.`,
+${
+      params.clockMode === 'circle'
+        ? `Ahora el anillo mide ${n(measures.centerlineLengthMm, 0)} mm de contorno. Los modos en espiral necesitan un r₀ mucho más pequeño que este: al cambiar de modo saltarán comprobaciones, cada una con su botón de arreglo.`
+        : `Con los radios y la ventana de ahora caben entre ${n(guidance.minTurns, 2)} y ${n(guidance.maxTurns, 2)} vueltas. Si un modo se sale de ese rango, ensanche r₁ − r₀ o acorte la ventana.`
+    }`,
     en: `Where each hour's angle comes from. Everything else hangs off this choice.
 
+• Circle — a single turn, so the wall closes on itself into a cylinder rather than a spiral. The radius is r₀ and r₁ is disabled. The angle is still lunar: it is the elapsed phase, scaled so the window covers exactly one turn, so a window of one synodic month IS the moon's phase, with new moon at the seam.
 • Synodic — angle = unwrapped moon phase. One turn = one synodic month (~29.5 days). New moons at 0°, full at 180°. The window fixes the turns, not you: ${n(measures.turns, 2)} right now.
 • Spring–neap — angle = 2 × phase. New and full moon both land at 0°, so the month's two spring tides share a direction. Twice the turns and twice the wall.
 • Linear — angle uniform in time, turns set by hand. It aligns nothing: it is the control version to compare the others against.
 
-At the present radii and window the piece holds between ${n(guidance.minTurns, 2)} and ${n(guidance.maxTurns, 2)} turns. If a mode falls outside that, widen r₁ − r₀ or shorten the window.`,
+${
+      params.clockMode === 'circle'
+        ? `The ring currently measures ${n(measures.centerlineLengthMm, 0)} mm around. The spiral modes need a far smaller r₀ than this: switching will raise checks, each with its own fix button.`
+        : `At the present radii and window the piece holds between ${n(guidance.minTurns, 2)} and ${n(guidance.maxTurns, 2)} turns. If a mode falls outside that, widen r₁ − r₀ or shorten the window.`
+    }`,
   }),
 
   linearTurns: ({ guidance, params, measures }) =>
@@ -84,14 +94,26 @@ Switch the mode to “Linear” to set them by hand, or move the window dates to
   },
 
   // --------------------------------------------------------------- spiral
-  r0: ({ measures }) => ({
-    es: `Radio al principio de la ventana, en mm (tamaño cocido). Marca lo apretado que queda el centro: con r₀ pequeño las primeras horas se comprimen mucho y un día ocupa poquísimo arco. Diámetro exterior cocido ahora: ${n(measures.firedOuterDiameterMm, 0)} mm.`,
-    en: `Radius at the start of the window, in mm (fired size). It sets how tight the middle is: a small r₀ squeezes the first hours hard, and a day occupies very little arc. Fired outer diameter right now: ${n(measures.firedOuterDiameterMm, 0)} mm.`,
-  }),
-  r1: ({ guidance, measures }) => ({
-    es: `Radio al final de la ventana, en mm (cocido). r₁ − r₀ es el sitio que hay para repartir las vueltas: ahora ${n(guidance.radialSpanMm, 0)} mm para ${n(measures.turns, 2)} vueltas. El horno admite hasta r₁ = ${n(guidance.maxR1Mm, 0)} mm.`,
-    en: `Radius at the end of the window, in mm (fired). r₁ − r₀ is the room the turns have to share: ${n(guidance.radialSpanMm, 0)} mm for ${n(measures.turns, 2)} turns right now. The kiln allows up to r₁ = ${n(guidance.maxR1Mm, 0)} mm.`,
-  }),
+  r0: ({ measures, params, guidance }) =>
+    params.clockMode === 'circle'
+      ? {
+          es: `El radio del anillo, en mm (tamaño cocido). Es lo único que fija el tamaño en modo círculo: contorno ${n(measures.centerlineLengthMm, 0)} mm, diámetro exterior cocido ${n(measures.firedOuterDiameterMm, 0)} mm. El horno admite hasta r₀ = ${n(guidance.maxOuterRadiusMm, 0)} mm.`,
+          en: `The radius of the ring, in mm (fired size). In circle mode it is the only thing that sets the size: ${n(measures.centerlineLengthMm, 0)} mm around, ${n(measures.firedOuterDiameterMm, 0)} mm fired outer diameter. The kiln allows up to r₀ = ${n(guidance.maxOuterRadiusMm, 0)} mm.`,
+        }
+      : {
+          es: `Radio al principio de la ventana, en mm (tamaño cocido). Marca lo apretado que queda el centro: con r₀ pequeño las primeras horas se comprimen mucho y un día ocupa poquísimo arco. Diámetro exterior cocido ahora: ${n(measures.firedOuterDiameterMm, 0)} mm.`,
+          en: `Radius at the start of the window, in mm (fired size). It sets how tight the middle is: a small r₀ squeezes the first hours hard, and a day occupies very little arc. Fired outer diameter right now: ${n(measures.firedOuterDiameterMm, 0)} mm.`,
+        },
+  r1: ({ guidance, measures, params }) =>
+    params.clockMode === 'circle'
+      ? {
+          es: 'Desactivado: un anillo cerrado no crece hacia fuera, así que el radio lo da r₀ y r₁ no se usa. Cambie el modo de reloj a sinódico, sicigias o lineal para que vuelva a contar.',
+          en: 'Disabled: a closed ring does not grow outward, so r₀ gives the radius and r₁ is unused. Switch the clock mode to synodic, spring–neap or linear for it to count again.',
+        }
+      : {
+          es: `Radio al final de la ventana, en mm (cocido). r₁ − r₀ es el sitio que hay para repartir las vueltas: ahora ${n(guidance.radialSpanMm, 0)} mm para ${n(measures.turns, 2)} vueltas. El horno admite hasta r₁ = ${n(guidance.maxOuterRadiusMm, 0)} mm.`,
+          en: `Radius at the end of the window, in mm (fired). r₁ − r₀ is the room the turns have to share: ${n(guidance.radialSpanMm, 0)} mm for ${n(measures.turns, 2)} turns right now. The kiln allows up to r₁ = ${n(guidance.maxOuterRadiusMm, 0)} mm.`,
+        },
   thetaRef: {
     es: 'Gira la planta entera, en grados. No cambia nada de la pieza: sólo decide hacia dónde mira la luna nueva. El valor por defecto, −90°, la pone hacia el espectador.',
     en: 'Rotates the whole plan, in degrees. It changes nothing about the piece: it only decides which way new moon points. The default, −90°, puts it toward the viewer.',

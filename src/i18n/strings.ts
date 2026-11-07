@@ -35,6 +35,7 @@ export const STRINGS = {
   // panel sections
   clock: { es: 'Reloj', en: 'Clock' },
   clockMode: { es: 'Modo', en: 'Mode' },
+  circle: { es: 'Círculo (cilindro cerrado)', en: 'Circle (closed cylinder)' },
   synodic: { es: 'Sinódico (fase lunar)', en: 'Synodic (moon phase)' },
   springNeap: { es: 'Sicigias (2 × fase)', en: 'Spring–neap (2 × phase)' },
   linear: { es: 'Lineal (control)', en: 'Linear (control)' },
@@ -121,8 +122,12 @@ export const STRINGS = {
     en: 'Observed sea level, Tanegashima',
   },
   dragHint: {
-    es: 'Arrastre sobre la franja para recorrer la espiral',
-    en: 'Drag along the strip to travel the spiral',
+    es: 'Pase el ratón para recorrer · clic en el inicio y el fin para fijar la ventana · arrastre la ventana para moverla',
+    en: 'Hover to travel · click the start and the end to set the window · drag the window to move it',
+  },
+  pickEnd: {
+    es: 'Ahora haga clic en el fin de la ventana (Esc para cancelar)',
+    en: 'Now click the end of the window (Esc to cancel)',
   },
 } as const;
 

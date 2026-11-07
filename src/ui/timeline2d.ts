@@ -21,12 +21,7 @@ const PADDING = { top: 15, right: 8, bottom: 14, left: 30 };
 export interface TimelineHandle {
   element: SVGSVGElement;
   /** Redraw everything. */
-  update(state: {
-    params: Params;
-    cursorHourIndex: number | null;
-    activeEventId: string | null;
-    lang: Lang;
-  }): void;
+  update(state: TimelineState): void;
   /** Map a client x coordinate to a fractional hour index, or null if outside. */
   hourIndexAtClientX(clientX: number): number | null;
   /** Client x coordinate of an hour index. */
@@ -42,6 +37,15 @@ function element<K extends keyof SVGElementTagNameMap>(
     node.setAttribute(key, String(value));
   }
   return node;
+}
+
+export interface TimelineState {
+  params: Params;
+  cursorHourIndex: number | null;
+  activeEventId: string | null;
+  lang: Lang;
+  /** First edge of a window the user is half-way through picking. */
+  pendingWindowStart: number | null;
 }
 
 export function createTimeline(
@@ -97,12 +101,7 @@ export function createTimeline(
     return `${top.join('')}${bottom.reverse().join('')}Z`;
   };
 
-  const draw = (state: {
-    params: Params;
-    cursorHourIndex: number | null;
-    activeEventId: string | null;
-    lang: Lang;
-  }): void => {
+  const draw = (state: TimelineState): void => {
     width = container.clientWidth || 800;
     height = container.clientHeight || 120;
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -255,6 +254,49 @@ export function createTimeline(
       );
     }
     svg.append(eventGroup);
+
+    // --- the window's own edges -------------------------------------------
+    // The dimming says where the window is not; these say exactly where it
+    // starts and ends, and the bar along the top is the part you can grab to
+    // slide the whole thing.
+    const windowGroup = element('g');
+    const xStart = xOfHour(i0);
+    const xEnd = xOfHour(i1);
+    windowGroup.append(
+      element('rect', {
+        class: 'tl-window-grip',
+        x: xStart,
+        y: PADDING.top,
+        width: Math.max(xEnd - xStart, 1),
+        height: 3,
+      }),
+    );
+    for (const x of [xStart, xEnd]) {
+      windowGroup.append(
+        element('line', {
+          class: 'tl-window-edge',
+          x1: x,
+          y1: PADDING.top,
+          x2: x,
+          y2: PADDING.top + plotHeight(),
+        }),
+      );
+    }
+    svg.append(windowGroup);
+
+    // --- a window being picked --------------------------------------------
+    if (state.pendingWindowStart !== null) {
+      const x = xOfHour(state.pendingWindowStart);
+      svg.append(
+        element('line', {
+          class: 'tl-window-pending',
+          x1: x,
+          y1: PADDING.top,
+          x2: x,
+          y2: PADDING.top + plotHeight(),
+        }),
+      );
+    }
 
     // --- cursor -----------------------------------------------------------
     if (state.cursorHourIndex !== null) {
