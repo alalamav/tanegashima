@@ -1,0 +1,287 @@
+{
+  "scriptVersion": "1.0.0",
+  "builtAtUtc": "2026-11-06T22:53:27.291Z",
+  "inputs": [
+    {
+      "path": "data/raw/jma/hry199909TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199909/hry199909TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:41.331Z",
+      "sha256": "808c1dab64081aad549ce05d7c1b587f039e2094cd1d0d9210931a960a0d1b1a",
+      "bytes": 4110
+    },
+    {
+      "path": "data/raw/jma/dep199909TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199909/dep199909TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:41.545Z",
+      "sha256": "7e026a4718bf4219c323d0a315523e625822607e221fdb4941c0cc8004feaed3",
+      "bytes": 3210
+    },
+    {
+      "path": "data/raw/jma/hry199910TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199910/hry199910TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:41.750Z",
+      "sha256": "a28ce0a3fb7479c3a685e1d2ad1483ddb70d610ff3682f643d4ae4aa94348156",
+      "bytes": 4247
+    },
+    {
+      "path": "data/raw/jma/dep199910TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199910/dep199910TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:41.948Z",
+      "sha256": "25c869a8be2f648c126287a39db47580b90c1331c4d3c5b54b3cb616ebcb811a",
+      "bytes": 3317
+    },
+    {
+      "path": "data/raw/jma/hry199911TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199911/hry199911TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:42.143Z",
+      "sha256": "6278f1ac3f43c87820dc368444071aec0851f26c72efdec826c84d8251d1ecb3",
+      "bytes": 4110
+    },
+    {
+      "path": "data/raw/jma/dep199911TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199911/dep199911TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:42.342Z",
+      "sha256": "e179b31a0d79f5020d1bc044bd040224c6693eeb8a1c78e9ead057510af8fade",
+      "bytes": 3210
+    },
+    {
+      "path": "data/raw/jma/hry199912TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199912/hry199912TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:42.542Z",
+      "sha256": "be1ec72da31fb265dae0ba890c069d77b5e03860f803c3a401ce436e61ac3c6b",
+      "bytes": 4247
+    },
+    {
+      "path": "data/raw/jma/dep199912TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199912/dep199912TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:42.750Z",
+      "sha256": "99472ff134660412e44ae09f4944d5e32ab9e0ca2129a99648aa88f0a1a5c9f9",
+      "bytes": 3317
+    }
+  ],
+  "datumCm": -374.5,
+  "datumSource": "JMA month page header 観測基準面の標高 (genbo.php?stn=TJ&year=1999&month=MM)",
+  "datumVerified": true,
+  "harmonicFit": {
+    "constituents": [
+      {
+        "name": "M2",
+        "amplitudeCm": 55.145,
+        "phaseDeg": 306.79,
+        "speedDegPerHour": 28.9841042
+      },
+      {
+        "name": "S2",
+        "amplitudeCm": 24.207,
+        "phaseDeg": 202.15,
+        "speedDegPerHour": 30
+      },
+      {
+        "name": "N2",
+        "amplitudeCm": 10.385,
+        "phaseDeg": 276,
+        "speedDegPerHour": 28.4397295
+      },
+      {
+        "name": "K1",
+        "amplitudeCm": 19.181,
+        "phaseDeg": 305.93,
+        "speedDegPerHour": 15.0410686
+      },
+      {
+        "name": "O1",
+        "amplitudeCm": 14.467,
+        "phaseDeg": 178.17,
+        "speedDegPerHour": 13.9430356
+      },
+      {
+        "name": "Q1",
+        "amplitudeCm": 2.883,
+        "phaseDeg": 135.9,
+        "speedDegPerHour": 13.3986609
+      }
+    ],
+    "meanCm": 381.536,
+    "residualRmsCm": 9.247,
+    "rSquared": 0.96198,
+    "sampleCount": 2887,
+    "fitWindowUtc": [
+      "1999-08-31T15:00:00.000Z",
+      "1999-12-31T14:00:00.000Z"
+    ]
+  },
+  "gaps": [
+    {
+      "startUtc": "1999-09-13T21:00:00.000Z",
+      "endUtc": "1999-09-15T00:00:00.000Z",
+      "hours": 28,
+      "method": "astro from harmonic fit (M2 S2 N2 K1 O1 Q1); dep linearly interpolated; obs = astro + dep"
+    },
+    {
+      "startUtc": "1999-10-13T18:00:00.000Z",
+      "endUtc": "1999-10-14T06:00:00.000Z",
+      "hours": 13,
+      "method": "astro from harmonic fit (M2 S2 N2 K1 O1 Q1); dep linearly interpolated; obs = astro + dep"
+    }
+  ],
+  "counts": {
+    "hryLines": {
+      "1999-09": 30,
+      "1999-10": 31,
+      "1999-11": 30,
+      "1999-12": 31
+    },
+    "depLines": {
+      "1999-09": 30,
+      "1999-10": 31,
+      "1999-11": 30,
+      "1999-12": 31
+    },
+    "missingHourly": {
+      "1999-09": 28,
+      "1999-10": 13,
+      "1999-11": 0,
+      "1999-12": 0
+    }
+  },
+  "checks": [
+    {
+      "name": "day counts Sep–Dec",
+      "expected": "[30,31,30,31]",
+      "actual": "[30,31,30,31]",
+      "pass": true
+    },
+    {
+      "name": "missing hourly values Sep–Dec",
+      "expected": "[28,13,0,0]",
+      "actual": "[28,13,0,0]",
+      "pass": true
+    },
+    {
+      "name": "hry 1999-10-07 hourly (JST)",
+      "expected": "[360,383,411,436,452,455,441,413,378,344,320,313,325,351,386,421,450,464,459,439,408,375,348,335]",
+      "actual": "[360,383,411,436,452,455,441,413,378,344,320,313,325,351,386,421,450,464,459,439,408,375,348,335]",
+      "pass": true
+    },
+    {
+      "name": "dep 1999-10-07 hourly (JST)",
+      "expected": "[10,10,9,7,6,7,7,7,8,8,9,10,12,12,11,9,8,8,6,6,7,7,8,10]",
+      "actual": "[10,10,9,7,6,7,7,7,8,8,9,10,12,12,11,9,8,8,6,6,7,7,8,10]",
+      "pass": true
+    },
+    {
+      "name": "1999-10-06 07 h JST obs/dep",
+      "expected": "[379,3]",
+      "actual": "[379,3]",
+      "pass": true
+    },
+    {
+      "name": "1999-12-11 07 h JST obs/dep",
+      "expected": "[413,-10]",
+      "actual": "[413,-10]",
+      "pass": true
+    },
+    {
+      "name": "hry199910TJ.txt line 1 — 0 h value",
+      "expected": "410",
+      "actual": "410",
+      "pass": true
+    },
+    {
+      "name": "hry199910TJ.txt line 1 — date",
+      "expected": "\"1999-10-01\"",
+      "actual": "\"1999-10-01\"",
+      "pass": true
+    },
+    {
+      "name": "hry199910TJ.txt line 1 — first high",
+      "expected": "{\"hour\":10,\"minute\":28,\"cm\":437}",
+      "actual": "{\"hour\":10,\"minute\":28,\"cm\":437}",
+      "pass": true
+    },
+    {
+      "name": "hry199910TJ.txt line 1 — first low",
+      "expected": "{\"hour\":4,\"minute\":5,\"cm\":313}",
+      "actual": "{\"hour\":4,\"minute\":5,\"cm\":313}",
+      "pass": true
+    },
+    {
+      "name": "daily range 1999-09-26",
+      "expected": "181",
+      "actual": "181",
+      "pass": true
+    },
+    {
+      "name": "daily range 1999-10-07",
+      "expected": "151",
+      "actual": "151",
+      "pass": true
+    },
+    {
+      "name": "minimum daily range Sep–Dec",
+      "expected": "{\"date\":\"1999-09-19\",\"range\":68}",
+      "actual": "{\"date\":\"1999-09-19\",\"range\":68}",
+      "pass": true
+    },
+    {
+      "name": "maximum daily range Sep–Dec",
+      "expected": "{\"date\":\"1999-12-24\",\"range\":228}",
+      "actual": "{\"date\":\"1999-12-24\",\"range\":228}",
+      "pass": true
+    },
+    {
+      "name": "new moon 1999-10-09T11:34:00Z within 5 min",
+      "expected": "true",
+      "actual": "true",
+      "pass": true
+    },
+    {
+      "name": "new moon 1999-11-08T03:53:00Z within 5 min",
+      "expected": "true",
+      "actual": "true",
+      "pass": true
+    },
+    {
+      "name": "new moon 1999-12-07T22:31:00Z within 5 min",
+      "expected": "true",
+      "actual": "true",
+      "pass": true
+    },
+    {
+      "name": "full moon 1999-09-25T10:51:00Z within 5 min",
+      "expected": "true",
+      "actual": "true",
+      "pass": true
+    },
+    {
+      "name": "full moon 1999-10-24T21:02:00Z within 5 min",
+      "expected": "true",
+      "actual": "true",
+      "pass": true
+    },
+    {
+      "name": "full moon 1999-11-23T07:03:00Z within 5 min",
+      "expected": "true",
+      "actual": "true",
+      "pass": true
+    },
+    {
+      "name": "full moon 1999-12-22T17:31:00Z within 5 min",
+      "expected": "true",
+      "actual": "true",
+      "pass": true
+    },
+    {
+      "name": "event count",
+      "expected": "5",
+      "actual": "5",
+      "pass": true
+    },
+    {
+      "name": "all events inside the built window",
+      "expected": "true",
+      "actual": "true",
+      "pass": true
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "station": {
+    "code": "TJ",
+    "nameEn": "Tanegashima",
+    "nameJa": "種子島"
+  },
+  "format": "https://ds.data.jma.go.jp/kaiyou/db/tide/genbo/format.html",
+  "datum": {
+    "cm": -374.5,
+    "source": "JMA month page header 観測基準面の標高 (genbo.php?stn=TJ&year=1999&month=MM)",
+    "verifiedMonths": [
+      "1999-09",
+      "1999-10",
+      "1999-11",
+      "1999-12"
+    ],
+    "assumedMonths": []
+  },
+  "files": [
+    {
+      "path": "data/raw/jma/hry199909TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199909/hry199909TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:41.331Z",
+      "sha256": "808c1dab64081aad549ce05d7c1b587f039e2094cd1d0d9210931a960a0d1b1a",
+      "bytes": 4110,
+      "fetchedByScript": true
+    },
+    {
+      "path": "data/raw/jma/dep199909TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199909/dep199909TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:41.545Z",
+      "sha256": "7e026a4718bf4219c323d0a315523e625822607e221fdb4941c0cc8004feaed3",
+      "bytes": 3210,
+      "fetchedByScript": true
+    },
+    {
+      "path": "data/raw/jma/hry199910TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199910/hry199910TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:41.750Z",
+      "sha256": "a28ce0a3fb7479c3a685e1d2ad1483ddb70d610ff3682f643d4ae4aa94348156",
+      "bytes": 4247,
+      "fetchedByScript": true
+    },
+    {
+      "path": "data/raw/jma/dep199910TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199910/dep199910TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:41.948Z",
+      "sha256": "25c869a8be2f648c126287a39db47580b90c1331c4d3c5b54b3cb616ebcb811a",
+      "bytes": 3317,
+      "fetchedByScript": true
+    },
+    {
+      "path": "data/raw/jma/hry199911TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199911/hry199911TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:42.143Z",
+      "sha256": "6278f1ac3f43c87820dc368444071aec0851f26c72efdec826c84d8251d1ecb3",
+      "bytes": 4110,
+      "fetchedByScript": true
+    },
+    {
+      "path": "data/raw/jma/dep199911TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199911/dep199911TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:42.342Z",
+      "sha256": "e179b31a0d79f5020d1bc044bd040224c6693eeb8a1c78e9ead057510af8fade",
+      "bytes": 3210,
+      "fetchedByScript": true
+    },
+    {
+      "path": "data/raw/jma/hry199912TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199912/hry199912TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:42.542Z",
+      "sha256": "be1ec72da31fb265dae0ba890c069d77b5e03860f803c3a401ce436e61ac3c6b",
+      "bytes": 4247,
+      "fetchedByScript": true
+    },
+    {
+      "path": "data/raw/jma/dep199912TJ.txt",
+      "url": "https://www.data.jma.go.jp/kaiyou/data/db/tide/genbo/1999/199912/dep199912TJ.txt",
+      "retrievedUtc": "2026-11-06T22:51:42.750Z",
+      "sha256": "99472ff134660412e44ae09f4944d5e32ab9e0ca2129a99648aa88f0a1a5c9f9",
+      "bytes": 3317,
+      "fetchedByScript": true
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+[
+  {
+    "id": "e1",
+    "utc": "1999-09-26T00:00:00.000Z",
+    "precision": "day",
+    "labelEs": "Primera erupcion magmatica",
+    "labelEn": "First magmatic eruption",
+    "plumeKm": null,
+    "plumeRef": "",
+    "sourceUrl": "https://link.springer.com/10.1007/s00445-023-01626-3",
+    "notes": "Wright et al. 2023. Known only to the day; drawn as a 24 h interval, not an instant.",
+    "hourIndex": 609,
+    "durationHours": 24,
+    "sampled": {
+      "elev": 42.5,
+      "obs": 417,
+      "astro": 415,
+      "dep": 2,
+      "phase": 547.2233830273647,
+      "phaseWrapped": 187.2233830273647,
+      "illumination": 0.9946446343766002
+    },
+    "outsideWindow": false
+  },
+  {
+    "id": "e2",
+    "utc": "1999-10-05T22:25:00.000Z",
+    "precision": "advisory",
+    "labelEs": "Erupcion subpliniana, 2 mm de ceniza sobre Quito",
+    "labelEn": "Subplinian eruption, 2 mm ash on Quito",
+    "plumeKm": 15,
+    "plumeRef": "Washington VAAC via Wright et al. 2023; NOAA OSEI",
+    "sourceUrl": "https://webarchive.library.unt.edu/web/20130216070607/http://www.osei.noaa.gov/guagua.html",
+    "notes": "22:25 UTC is the advisory time, not the onset: the eruption began earlier that afternoon. Plume 15 km above the summit.",
+    "hourIndex": 847.4166666666666,
+    "durationHours": 0,
+    "sampled": {
+      "elev": -8.75086805555433,
+      "obs": 365.7491319444457,
+      "astro": 362.8504050925938,
+      "dep": 3,
+      "phase": 677.6298983410751,
+      "phaseWrapped": 317.6298983410751,
+      "illumination": 0.13132762590973251
+    },
+    "outsideWindow": false
+  },
+  {
+    "id": "e3",
+    "utc": "1999-10-07T12:06:00.000Z",
+    "precision": "minute",
+    "labelEs": "Erupcion subpliniana con flujo piroclastico",
+    "labelEn": "Subplinian eruption with pyroclastic flow",
+    "plumeKm": 14,
+    "plumeRef": "IG-EPN report 7 Oct 1999; CIMSS GOES-8 image at 12:07 UTC",
+    "sourceUrl": "https://cimss.ssec.wisc.edu/goes/misc/991007_volcano.html",
+    "notes": "Plume reported as 13-15 km above the summit; 14 km recorded as the midpoint.",
+    "hourIndex": 885.1,
+    "durationHours": 0,
+    "sampled": {
+      "elev": -2.506000000000684,
+      "obs": 371.99399999999935,
+      "astro": 364.93899999999934,
+      "dep": 7.100000000000023,
+      "phase": 696.6704817110422,
+      "phaseWrapped": 336.67048171104216,
+      "illumination": 0.041807216149745474
+    },
+    "outsideWindow": false
+  },
+  {
+    "id": "e4",
+    "utc": "1999-11-10T00:00:00.000Z",
+    "precision": "day",
+    "labelEs": "Erupcion vulcaniana tras un mes de calma",
+    "labelEn": "Vulcanian eruption ends a month of quiet",
+    "plumeKm": null,
+    "plumeRef": "",
+    "sourceUrl": "https://link.springer.com/10.1007/s00445-023-01626-3",
+    "notes": "Wright et al. 2023. Known only to the day; drawn as a 24 h interval.",
+    "hourIndex": 1689,
+    "durationHours": 24,
+    "sampled": {
+      "elev": 62.5,
+      "obs": 437,
+      "astro": 436,
+      "dep": 1,
+      "phase": 1100.1862394010743,
+      "phaseWrapped": 20.186239401074403,
+      "illumination": 0.03222327719173046
+    },
+    "outsideWindow": false
+  },
+  {
+    "id": "e5",
+    "utc": "1999-12-10T22:13:00.000Z",
+    "precision": "minute",
+    "labelEs": "Erupcion grande",
+    "labelEn": "Large eruption",
+    "plumeKm": null,
+    "plumeRef": "",
+    "sourceUrl": "https://response.reliefweb.int/latin-america-and-caribbean/reports?page=11488",
+    "notes": "IG-EPN report of 10 Dec 1999. Plume height not reported in the sources consulted.",
+    "hourIndex": 2431.2166666666667,
+    "durationHours": 0,
+    "sampled": {
+      "elev": 43.20988194444506,
+      "obs": 417.70988194444504,
+      "astro": 427.691495370371,
+      "dep": -10,
+      "phase": 1472.2865806092573,
+      "phaseWrapped": 32.286580609257214,
+      "illumination": 0.07779660897242446
+    },
+    "outsideWindow": false
+  }
+]

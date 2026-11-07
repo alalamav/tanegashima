@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Dos relojes · Tanegashima 1999</title>
+    <meta
+      name="description"
+      content="El nivel del mar medido en Tanegashima durante las erupciones del Pichincha en 1999, como un muro cerámico en espiral."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230E0E0F'/%3E%3Cpath d='M16 16 m0 -11 a11 11 0 1 1 -7.8 3.2 a8 8 0 1 0 5.6 -2.3 a5 5 0 1 1 3.5 1.5' fill='none' stroke='%23ECE9E3' stroke-width='1.4'/%3E%3Ccircle cx='24' cy='9' r='2' fill='%23FF2A2A'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view" aria-label="Vista 3D del muro en espiral"></canvas>
+
+      <header id="readout" class="panel-surface">
+        <h1>
+          <span data-i18n="title">Dos relojes</span>
+          <button id="lang-toggle" type="button" title="Español / English">ES</button>
+        </h1>
+        <p class="subtitle" data-i18n="subtitle"></p>
+        <dl id="readout-values"></dl>
+        <p class="framing" data-i18n="framing"></p>
+      </header>
+
+      <aside id="panel" class="panel-surface" aria-label="Parámetros">
+        <button id="panel-toggle" type="button" aria-expanded="true">Parámetros ×</button>
+        <div id="panel-body">
+          <div id="tweakpane"></div>
+          <section id="checks">
+            <h2 data-i18n="checks">Comprobaciones</h2>
+            <ul id="checks-list"></ul>
+          </section>
+          <section id="events">
+            <h2 data-i18n="events">Erupciones</h2>
+            <ul id="events-list"></ul>
+          </section>
+          <section id="provenance">
+            <h2 data-i18n="data">Datos</h2>
+            <dl id="provenance-values"></dl>
+          </section>
+        </div>
+      </aside>
+
+      <footer id="timeline" class="panel-surface">
+        <div id="timeline-head">
+          <h2 data-i18n="timelineTitle"></h2>
+          <span class="hint" data-i18n="dragHint"></span>
+        </div>
+        <div id="timeline-svg"></div>
+      </footer>
+
+      <div id="status" role="status"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
