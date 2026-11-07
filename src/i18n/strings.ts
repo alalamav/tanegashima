@@ -42,8 +42,8 @@ export const STRINGS = {
   linearTurns: { es: 'Vueltas (lineal)', en: 'Turns (linear)' },
   windowStart: { es: 'Inicio de la ventana', en: 'Window start' },
   windowEnd: { es: 'Fin de la ventana', en: 'Window end' },
-  shortWindow: { es: 'Ventana corta (26 sep – 15 oct)', en: 'Short window (26 Sep – 15 Oct)' },
-  fullWindow: { es: 'Ventana completa', en: 'Full window' },
+  shortWindow: { es: 'Ventana del jarrón (1 – 12 oct)', en: 'Vase window (1 – 12 Oct)' },
+  fullWindow: { es: 'Registro completo (26 sep – 31 dic)', en: 'Whole record (26 Sep – 31 Dec)' },
 
   spiral: { es: 'Espiral', en: 'Spiral' },
   r0: { es: 'Radio inicial r₀', en: 'Inner radius r₀' },

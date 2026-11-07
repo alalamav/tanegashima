@@ -8,7 +8,7 @@ import { Pane } from 'tweakpane';
 import type { BladeApi, FolderApi } from '@tweakpane/core';
 
 import {
-  DEFAULT_PARAMS,
+  FULL_WINDOW_PRESET,
   isSpiral,
   PARAM_RANGES,
   SHORT_WINDOW_PRESET,
@@ -148,10 +148,9 @@ export function createPanel(
       changed();
     });
     withHelp(clock.addButton({ title: t('fullWindow', lang) }), 'fullWindow').on('click', () => {
-      params.windowStartUtc = DEFAULT_PARAMS.windowStartUtc;
-      params.windowEndUtc = DEFAULT_PARAMS.windowEndUtc;
-      params.r0 = DEFAULT_PARAMS.r0;
-      params.r1 = DEFAULT_PARAMS.r1;
+      // Only the dates: the radii are the maker's, and the checks will say if
+      // the whole record no longer fits round them.
+      Object.assign(params, FULL_WINDOW_PRESET);
       dates.start = isoDay(params.windowStartUtc);
       dates.end = isoDay(params.windowEndUtc);
       pane?.refresh();

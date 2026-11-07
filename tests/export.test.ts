@@ -220,7 +220,10 @@ describe('spec sheet', () => {
     const e2 = spec.events.find((event) => event.id === 'e2')!;
     expect(e2.precision).toBe('advisory');
     expect(e2.precisionNote).toBe('advisory time');
-    expect(e2.notchDepthMm).toBeCloseTo(4 + 1.5 * 15, 6);
+    expect(e2.notchDepthMm).toBeCloseTo(
+      params.notchDepth0 + params.notchDepthPerKm * 15,
+      6,
+    );
     const e5 = spec.events.find((event) => event.id === 'e5')!;
     expect(e5.plumeKm).toBeNull();
   });

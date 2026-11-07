@@ -264,11 +264,11 @@ All model dimensions are **fired** sizes in mm. Shrinkage is applied only at exp
 
 ### Clock — `src/geom/clock.ts`
 
-| Mode | θ(t) | Turns, 26 Sep – 31 Dec | Radius | What lines up |
+| Mode | θ(t) | Turns | Radius | What lines up |
 | --- | --- | --- | --- | --- |
 | **Circle** (default) | lunar phase, scaled to one turn | 1 | constant, r₀ | the seam; a one-lunation window puts new moon on it |
-| Synodic | unwrapped moon phase | 3.29 | r₀ → r₁ | new moons at 0°, full moons at 180° |
-| Spring–neap | 2 × unwrapped phase | 6.59 | r₀ → r₁ | new *and* full moon both at 0° |
+| Synodic | unwrapped moon phase | one per synodic month | r₀ → r₁ | new moons at 0°, full moons at 180° |
+| Spring–neap | 2 × unwrapped phase | two per month | r₀ → r₁ | new *and* full moon both at 0° |
 | Linear | uniform in time | user-set | r₀ → r₁ | nothing — the control version |
 
 The Moon's angular speed varies by about ±12% over its orbit, so synodic mode is
@@ -276,12 +276,36 @@ slightly uneven in time. That unevenness is the Moon's, not an error, and it is
 kept. Whatever the mode, the readout always reports the *real* lunar phase, so the
 interface never lies about where the Moon was.
 
-### Circle mode — the closed cylinder
+### Circle mode — the crown of a vase
 
 The site opens on circle mode: one turn, constant radius, and the two ends of the
 wall joined, so the piece is a closed cylinder rather than an outward spiral. r₁
 has nowhere to grow to, so it is ignored and the panel disables it; r₀ alone sets
 the size.
+
+The defaults make a **crown to sit on the rim of a thrown vase**:
+
+| | |
+| --- | --- |
+| Window | **1–12 October 1999** — the 5 Oct and 7 Oct subplinian eruptions |
+| Ring radius r₀ | **100 mm** → 206 mm fired outer diameter, 234 mm green |
+| Around | 628 mm, 23 tidal cycles |
+| Crown | 15 mm collar rising to 56 mm at the spring tide |
+| Notches | e2 16.0 mm, e3 15.2 mm, at 0.8 mm per km of plume |
+| Clay | ~136 cm³, about 300 g fired |
+
+Those numbers are not a style choice, they are the only corner of the parameter
+space that works. One tidal cycle occupies `circumference × 12.42 / window
+hours` of arc; the circumference is fixed by the vase, so the window is what
+decides whether the tide can be cut at all. Twelve days on a 100 mm ring gives
+teeth about **13 mm wide at green size with a 3.2 : 1 height-to-width ratio** —
+carvable by hand. The brief's full 97 days on the same ring gives 2 mm teeth at
+18 : 1, which no method can make. The whole of 1–12 October is observed data:
+not one hour of it is reconstructed.
+
+`Registro completo` restores the brief's 97 days for looking at all five
+eruptions at once; the tide-wavelength check will say, correctly, that it cannot
+be built at this size.
 
 The angle is still lunar. It is the elapsed moon phase, scaled so the window
 covers exactly one turn — which means a window of **one synodic month is
@@ -339,8 +363,9 @@ At the default window and radii (r₀ = 30, r₁ = 140, 6 mm wall, 12 mm clearan
 
 | Configuration | Turns | Length | Turn spacing | Tide wavelength | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| **Circle, defaults** | 1 | 1.005 m | n/a | 5.4 mm | the shipped default; tide getting fine |
-| Synodic, r₀ = 30, r₁ = 140 | 3.29 | 1.76 m | 33.4 mm | 9.4 mm | passes; long to build |
+| **Circle, defaults (12 days)** | 1 | 0.63 m | n/a | 27.2 mm | the shipped default; carvable |
+| Circle, 97 days at r₀ = 100 | 1 | 0.63 m | n/a | 3.4 mm | unmakeable — teeth 2 mm wide |
+| Synodic, 97 days, r₀ = 30, r₁ = 140 | 3.29 | 1.76 m | 33.4 mm | 9.4 mm | passes; long to build |
 | Spring–neap, default radii | 6.59 | 3.52 m | **16.7 mm** | 18.9 mm | **fails**: turns crowd |
 | Spring–neap, r₁ = 149 | 6.59 | 3.71 m | 18.1 mm | 19.9 mm | spacing fixed, 3.7 m of wall |
 | **Spring–neap, short window** | 1.36 | 0.64 m | 51.5 mm | 16.7 mm | the one worth building |
@@ -424,20 +449,20 @@ reported in `clampedNotches` and flagged in the panel rather than silently thinn
 
 Live in the panel, and carried into the spec sheet.
 
-| Check | Rule | At the circle defaults | Lever when it fails |
+| Check | Rule | At the defaults | Lever when it fails |
 | --- | --- | --- | --- |
 | Turn spacing | ≥ t_wall + clearance (6 + 12 mm) | *not shown — a ring has no neighbouring turn* | r₁, r₀, clearance, turns |
-| Green diameter | fired ÷ (1 − shrinkage) ≤ kiln limit | **370.5 mm** ≤ 400 ✓ | the outer radius, shrinkage, kiln limit |
-| Tide wavelength | one M2 cycle ≈ length × 12.42 / window hours, ≥ min feature | **5.4 mm** ≥ 5 — warn | radius, turns, window, smoothing |
-| Wall height | between h_base and the maximum | **10.5 – 82.2 mm** ≤ 90 ✓ | k, h_base, maximum height |
-| Wall length | handwork budget | **1.005 m** ≤ 1.2 ✓ | window, radii, turns |
-| Notches | none clamped | 5 of 5 ✓ | depth per km, d₀, k, h_base |
-| Eruptions in the window | all of them get a notch | 5/5 ✓ | the window dates — no button |
+| Green diameter | fired ÷ (1 − shrinkage) ≤ kiln limit | **234.1 mm** ≤ 400 ✓ | the outer radius, shrinkage, kiln limit |
+| Tide wavelength | one M2 cycle ≈ length × 12.42 / window hours, ≥ min feature | **27.2 mm** ≥ 5 ✓ | radius, turns, window, smoothing |
+| Wall height | between h_base and the maximum | **8.4 – 55.9 mm** ≤ 90 ✓ | k, h_base, maximum height |
+| Wall length | handwork budget | **0.63 m** ≤ 1.2 ✓ | window, radii, turns |
+| Notches | none clamped | 2 of 2 ✓ | depth per km, d₀, k, h_base |
+| Eruptions in the window | all of them get a notch | **2/5** — warn | the window dates — no button |
 
-The default carries one amber warning, and it is an honest one: 97 days wrapped
-once around a 326 mm cylinder puts one tidal cycle in 5.4 mm of arc. The kiln
-caps the ring at r₀ = 173 mm, so no radius clears the check at this window
-length — the fix offered is to shorten the window instead, and it says so.
+The default carries one amber row, and it is a choice rather than a fault: the
+twelve-day window leaves e1, e4 and e5 off the piece. The check says so in those
+words and offers no button, because the only lever is the dates and only the
+maker knows whether those eruptions belong on this object.
 
 **A failing check says what to change, to what, and will do it for you.** Every
 limit is a one-line inequality, so `advice.ts` solves each one for the parameter
@@ -518,6 +543,36 @@ fabrication checks pass, but it is a lot of work in clay. The `smoothing` parame
 (low-pass along the arc) and a lower `k` are there to trade fidelity for buildability,
 and the short-window preset (26 Sep – 15 Oct, two-thirds of a turn around the two
 October eruptions, 0.33 m of wall) is there to trade duration for the same.
+
+---
+
+## Making it in clay
+
+A sequence that works with the exports:
+
+1. **Measure your own shrinkage** on a test tile and put it in the panel before
+   exporting. 12% is a placeholder, and every dimension on the templates scales
+   by 1/(1 − shrinkage).
+2. Roll the slab to green thickness (6.8 mm at 12%) and compress both faces.
+3. Stiffen to soft leather-hard: firm enough to stand, soft enough to bend.
+4. Cut the base line and the whole top profile **flat**, blade held vertical,
+   against the 1:1 wall-strip template. Leave the eruption notches.
+5. Wrap on the former, join the single seam, paddle true, and get the former out
+   before drying shrinkage grips it.
+6. **Cut the notches at leather-hard on the standing wall.** Their vertical
+   sides are the point; cutting them flat and then bending distorts them.
+7. Dry slowly, one to two weeks, with the top edge tented. Thin teeth dry far
+   faster than the collar and crack at the roots.
+8. Lute the 15 mm collar to the vase rim at leather-hard, both parts at the same
+   moisture.
+
+Paper clay or a grogged stoneware. The red belongs *in* the cut — underglaze or
+slip inlaid and wiped back — so the colour reads as a notch rather than a mark.
+
+One trap worth knowing: **smoothing does not widen the teeth.** It attenuates
+their height while leaving every zero crossing in place, so at 16 mm of
+smoothing the default still has 171 peaks, now 7 mm tall — a ripple, not a form.
+Only a shorter window or a larger ring widens the pitch.
 
 ---
 
@@ -638,7 +693,7 @@ always be matched. Filenames are `two-clocks_<what>_<hash>.<ext>`.
 npm test
 ```
 
-188 tests in six files.
+189 tests in six files.
 
 - `parseJma.test.ts` (20) — file shape, missing-value counts, every hand-read value
   from the brief, the daily-range extremes, extremum blocks, and the error paths:
@@ -652,7 +707,7 @@ npm test
 - `moon.test.ts` (16) — the phase convention, all seven PyEphem reference instants
   to ±5 min, unwrapping forwards and backwards, ~360° per synodic month over the real
   series, and the phase labels.
-- `geometry.test.ts` (59) — the built data's own invariants, the three clock modes,
+- `geometry.test.ts` (60) — the built data's own invariants, the three clock modes,
   arc-length resampling and forced sample positions, notch depths and widths, vertical
   notch sides, "cuts only inside notches and nowhere else", **watertightness and Euler
   characteristic 2**, green-size scaling, the fabrication checks passing at defaults
@@ -702,7 +757,7 @@ src/geom/              params.ts (incl. PARAM_RANGES)  clock.ts  spiral.ts
 src/export/            png.ts  mesh.ts  templates.ts  pdf.ts  spec.ts  download.ts
 src/ui/                scene.ts  timeline2d.ts  scrubber.ts  panel.ts  tooltip.ts
 src/i18n/              strings.ts (interface)  help.ts (tooltips)
-tests/                 six suites, 188 tests
+tests/                 six suites, 189 tests
 ```
 
 Stack: Vite + TypeScript, three.js (OrbitControls, GLTFExporter), `postprocessing`

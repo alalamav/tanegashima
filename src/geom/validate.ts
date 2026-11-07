@@ -453,11 +453,14 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     lengthLeverEs = `Baje las vueltas a ${comfortableTurns}`;
     lengthLeverEn = `Drop the turns to ${comfortableTurns}`;
   } else if (shortWindowHelps) {
-    lengthFix = { patch: { ...SHORT_WINDOW_PRESET }, labelEs: 'ventana corta', labelEn: 'short window' };
+    lengthFix = {
+      patch: { ...SHORT_WINDOW_PRESET },
+      labelEs: 'ventana del jarrón',
+      labelEn: 'vase window',
+    };
     lengthLeverEs =
-      'Use la ventana corta (26 sep – 15 oct, dos tercios de vuelta alrededor de las dos erupciones de octubre)';
-    lengthLeverEn =
-      'Use the short window (26 Sep – 15 Oct, two-thirds of a turn around the two October eruptions)';
+      'Vuelva a la ventana del jarrón (1 – 12 oct, las dos erupciones de octubre)';
+    lengthLeverEn = 'Go back to the vase window (1 – 12 Oct, the two October eruptions)';
   } else {
     lengthFix = {
       patch: {

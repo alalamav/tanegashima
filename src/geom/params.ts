@@ -83,20 +83,32 @@ export interface Params {
   lang: 'es' | 'en';
 }
 
+/**
+ * The defaults make the crown of a vase: a closed ring sized to sit on a thrown
+ * rim, carrying the twelve days around Pichincha's two subplinian eruptions.
+ *
+ * The window is the binding constraint. One tidal cycle occupies
+ * circumference x 12.42 / window hours of arc, and the circumference is fixed by
+ * the vase, so a long window packs the tide into teeth too fine to cut, dry or
+ * fire. At r0 = 100 mm and twelve days each tooth is about 13 mm wide at green
+ * size with a 3.2 : 1 height-to-width ratio — carvable by hand in a grogged or
+ * paper body. The whole of 1-12 October 1999 is observed data: not one hour of
+ * it is reconstructed.
+ */
 export const DEFAULT_PARAMS: Params = {
   clockMode: 'circle',
-  linearTurns: 3.25,
-  windowStartUtc: '1999-09-26T00:00:00.000Z',
-  windowEndUtc: '1999-12-31T23:00:00.000Z',
+  linearTurns: 1,
+  // 1-12 Oct 1999: the 5 Oct and 7 Oct subplinian eruptions, clear of the
+  // 13 Oct data gap at both ends.
+  windowStartUtc: '1999-10-01T00:00:00.000Z',
+  windowEndUtc: '1999-10-12T23:00:00.000Z',
 
-  // A closed ring and an outward spiral want very different radii: the ring has
-  // one turn to fit the whole record into, so it has to be wide, while the
-  // spiral has to stay small enough that three turns of wall are still a
-  // buildable length. r0 is the ring's radius and the spiral's inner radius, so
-  // it is set for the default mode; switching to a spiral mode will raise
-  // checks, each with a one-click fix.
-  r0: 160,
-  r1: 260,
+  // r0 is the ring's radius: 206 mm fired, 234 mm green — a generous but
+  // throwable vase mouth. r1 is unused in circle mode and is set so that the
+  // spiral modes also work at this window rather than failing the moment the
+  // mode is changed.
+  r0: 100,
+  r1: 170,
   // Plan y points away from the default camera, so -90 deg puts phase 0
   // (new moon) toward the viewer.
   thetaRefDeg: -90,
@@ -110,7 +122,9 @@ export const DEFAULT_PARAMS: Params = {
 
   notchWidth: 3,
   notchDepth0: 4,
-  notchDepthPerKm: 1.5,
+  // 0.8 mm/km puts the 15 km plume of 5 October at a 16 mm cut: unmistakable
+  // against a 41 mm crown, and well clear of cutting through it.
+  notchDepthPerKm: 0.8,
 
   shrinkagePct: 12,
   kilnLimitMm: 400,
@@ -197,9 +211,16 @@ export function snapDown(key: RangedParam, value: number): number {
 }
 
 /** A short window around the two October eruptions, offered as a preset. */
+/** The window the piece is designed around: the two October eruptions. */
 export const SHORT_WINDOW_PRESET: Partial<Params> = {
+  windowStartUtc: '1999-10-01T00:00:00.000Z',
+  windowEndUtc: '1999-10-12T23:00:00.000Z',
+};
+
+/** The whole record the brief covers, for seeing all five eruptions at once. */
+export const FULL_WINDOW_PRESET: Partial<Params> = {
   windowStartUtc: '1999-09-26T00:00:00.000Z',
-  windowEndUtc: '1999-10-15T23:00:00.000Z',
+  windowEndUtc: '1999-12-31T23:00:00.000Z',
 };
 
 /**

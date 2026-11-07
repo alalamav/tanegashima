@@ -12,6 +12,7 @@ import {
 } from '../src/geom/advice.js';
 import {
   DEFAULT_PARAMS,
+  FULL_WINDOW_PRESET,
   PARAM_RANGES,
   SHORT_WINDOW_PRESET,
   snapDown,
@@ -32,7 +33,13 @@ const events = JSON.parse(readFileSync(resolve(dataDir, 'events.json'), 'utf8'))
  * and no turn bracket, so the spiral cases pin their own radii; circle cases
  * pass `clockMode: 'circle'` explicitly.
  */
-const SPIRAL: Partial<Params> = { clockMode: 'synodic', r0: 30, r1: 140 };
+const SPIRAL: Partial<Params> = {
+  ...FULL_WINDOW_PRESET,
+  clockMode: 'synodic',
+  r0: 30,
+  r1: 140,
+  notchDepthPerKm: 1.5,
+};
 
 const build = (patch: Partial<Params> = {}) => {
   const params: Params = { ...DEFAULT_PARAMS, ...SPIRAL, ...patch };
@@ -218,7 +225,7 @@ describe('the advice actually fixes the check', () => {
   });
 
   it('notches: the suggested depth per km stops the clamping', () => {
-    const before = build({ ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 });
+    const before = build({ ...SHORT_WINDOW_PRESET, r0: 40, r1: 110, notchDepthPerKm: 1.5 });
     expect(before.level('notches')).toBe('warn');
     const suggested = /Drop the depth per km to (\d+(?:\.\d+)?) mm\/km/.exec(before.find('notches').adviceEn!);
     expect(suggested).not.toBeNull();
@@ -230,15 +237,15 @@ describe('the advice actually fixes the check', () => {
     });
     expect(after.wall.clampedNotches).toEqual([]);
     expect(after.level('notches')).toBe('ok');
-    // The short window still leaves two eruptions off the piece; that is the
+    // The vase window still leaves eruptions off the piece; that is the
     // window's doing and is reported on its own row.
     expect(after.level('eventCoverage')).toBe('warn');
   });
 
-  it('does not offer the short-window preset when the window is already short', () => {
+  it('does not offer the vase-window preset when the window is already that short', () => {
     const { checks } = build({ ...SHORT_WINDOW_PRESET, r0: 5, r1: 8 });
     const advice = checks.filter((check) => check.level !== 'ok').map((check) => check.adviceEn ?? '');
-    for (const text of advice) expect(text).not.toContain('short window');
+    for (const text of advice) expect(text).not.toContain('vase window');
   });
 
   it('names the real problem when r₀ is larger than r₁', () => {
@@ -366,8 +373,8 @@ describe('one-click fixes', () => {
     ['radius past the kiln', { r1: 400 }],
     ['gain far too high', { k: 1 }],
     ['radii inverted', { r0: 140, r1: 30 }],
-    ['short window', { ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 }],
-    ['short window, tiny radii', { ...SHORT_WINDOW_PRESET, r0: 8, r1: 20 }],
+    ['vase window', { ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 }],
+    ['vase window, tiny radii', { ...SHORT_WINDOW_PRESET, r0: 8, r1: 20 }],
     ['thick wall, no clearance room', { wallThickness: 18, clearanceMm: 30 }],
     ['spring–neap at ring radii', { clockMode: 'springNeap' as const, r0: 160, r1: 260 }],
     ['linear 12 turns at ring radii', { clockMode: 'linear' as const, linearTurns: 12, r0: 160, r1: 260 }],
@@ -425,7 +432,7 @@ describe('one-click fixes', () => {
   });
 
   it('unsettles at most one other check, and only ever to a warning', () => {
-    // Trade-offs are real: the short window shortens the wall but squeezes two
+    // Trade-offs are real: the vase window shortens the wall but squeezes two
     // notches against a lower crest. What a fix may never do is cascade.
     for (const [name, patch] of BROKEN) {
       const before = build(patch);
@@ -549,13 +556,13 @@ describe('one-click fixes', () => {
     expect(gain.fix!.patch).toEqual({ k: 0.27 });
   });
 
-  it('does not offer the short window in linear mode, where it changes no length', () => {
+  it('does not offer the vase window in linear mode, where it changes no length', () => {
     const linear = build({ clockMode: 'linear', linearTurns: 12 }).find('wallLength');
     expect(linear.fix!.patch).toHaveProperty('linearTurns');
     expect(linear.fix!.labelEn).toContain('turns');
 
     const synodic = build({ clockMode: 'springNeap' }).find('wallLength');
-    expect(synodic.fix!.labelEn).toBe('short window');
+    expect(synodic.fix!.labelEn).toBe('vase window');
   });
 
   it('keeps a spacing fix inside the kiln rather than trading red for red', () => {

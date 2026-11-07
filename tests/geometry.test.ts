@@ -6,6 +6,7 @@ import type { Series, VolcanoEvent } from '../src/data/series.js';
 import { makeClock, resolveWindow } from '../src/geom/clock.js';
 import {
   DEFAULT_PARAMS,
+  FULL_WINDOW_PRESET,
   SHORT_WINDOW_PRESET,
   configHash,
   greenScale,
@@ -23,11 +24,18 @@ const series = JSON.parse(readFileSync(resolve(dataDir, 'series.json'), 'utf8'))
 const events = JSON.parse(readFileSync(resolve(dataDir, 'events.json'), 'utf8')) as VolcanoEvent[];
 
 /**
- * The baseline for the spiral tests below. The app's own default is circle
- * mode, which has no outer radius and no neighbouring turns, so the spiral
- * cases pin their own radii rather than inheriting whatever the default is.
+ * The baseline for the spiral tests below: the brief's 97-day window at the
+ * radii it was sized for. The app's own default is a twelve-day ring sized for
+ * the crown of a vase, so these cases pin their own window and radii rather
+ * than inheriting whatever the default happens to be.
  */
-const params: Params = { ...DEFAULT_PARAMS, clockMode: 'synodic', r0: 30, r1: 140 };
+const params: Params = {
+  ...DEFAULT_PARAMS,
+  ...FULL_WINDOW_PRESET,
+  clockMode: 'synodic',
+  r0: 30,
+  r1: 140,
+};
 
 describe('built data', () => {
   it('holds 2928 hours of Sep–Dec 1999', () => {
@@ -170,7 +178,10 @@ describe('notch depths', () => {
   it('scales an instant notch with the plume height', () => {
     const e3 = events.find((event) => event.id === 'e3')!;
     expect(e3.plumeKm).toBe(14);
-    expect(notchDepth(e3, params)).toBeCloseTo(4 + 1.5 * 14, 9);
+    expect(notchDepth(e3, params)).toBeCloseTo(
+      params.notchDepth0 + params.notchDepthPerKm * 14,
+      9,
+    );
   });
 
   it('gives an unknown plume the base depth', () => {
@@ -349,20 +360,20 @@ describe('fabrication checks', () => {
   });
 });
 
-describe('short window preset', () => {
+describe('vase window preset', () => {
   const short: Params = { ...params, ...SHORT_WINDOW_PRESET, r0: 40, r1: 110 };
 
-  it('keeps only the events inside it', () => {
+  it('keeps only the two October eruptions', () => {
     const wall = buildWall(series, events, short);
-    expect(wall.notches.map((notch) => notch.eventId)).toEqual(['e1', 'e2', 'e3']);
-    expect(wall.droppedEvents.map((event) => event.id)).toEqual(['e4', 'e5']);
+    expect(wall.notches.map((notch) => notch.eventId)).toEqual(['e2', 'e3']);
+    expect(wall.droppedEvents.map((event) => event.id)).toEqual(['e1', 'e4', 'e5']);
     expect(checkNotchCoverage(wall, events).complete).toBe(true);
   });
 
-  it('covers about two-thirds of a turn', () => {
+  it('covers about four-tenths of a turn in synodic mode', () => {
     const wall = buildWall(series, events, short);
-    expect(wall.spiral.turns).toBeGreaterThan(0.5);
-    expect(wall.spiral.turns).toBeLessThan(0.8);
+    expect(wall.spiral.turns).toBeGreaterThan(0.3);
+    expect(wall.spiral.turns).toBeLessThan(0.5);
   });
 
   it('still builds a watertight mesh', () => {
@@ -483,8 +494,15 @@ describe('circle mode', () => {
     }
   });
 
-  it('cuts one notch per event over the full window', () => {
+  it('carries the two October eruptions at the shipped window', () => {
     const wall = buildWall(series, events, circle);
+    expect(wall.notches.map((notch) => notch.eventId)).toEqual(['e2', 'e3']);
+    // The 7 October eruption is the one the piece is built around.
+    expect(wall.notches.some((notch) => notch.eventId === 'e3')).toBe(true);
+  });
+
+  it('cuts one notch per event when the whole record is shown', () => {
+    const wall = buildWall(series, events, { ...circle, ...FULL_WINDOW_PRESET });
     expect(wall.notches).toHaveLength(events.length);
     expect(wall.droppedEvents).toHaveLength(0);
   });

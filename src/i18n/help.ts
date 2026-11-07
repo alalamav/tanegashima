@@ -85,12 +85,12 @@ Switch the mode to “Linear” to set them by hand, or move the window dates to
     en: 'Last hour on the piece. The record ends on 31 December 1999. The window must span at least 24 h; shortening it is the most direct way to cut the metres of wall.',
   },
   shortWindow: {
-    es: 'Preajuste: 26 sep – 15 oct, con r₀ = 40 y r₁ = 110 mm. Dos tercios de vuelta alrededor de las dos erupciones de octubre, unos 33 cm de muro en vez de 1,76 m.',
-    en: 'Preset: 26 Sep – 15 Oct, with r₀ = 40 and r₁ = 110 mm. Two-thirds of a turn around the two October eruptions, about 33 cm of wall instead of 1.76 m.',
+    es: 'Doce días, del 1 al 12 de octubre de 1999: las dos erupciones subplinianas, la del 5 y la del 7. Es la ventana para la que está pensada la pieza. Ni una hora de ese tramo está reconstruida, y sobre un anillo de este tamaño cada ciclo de marea mide unos 13 mm en crudo: se puede cortar a mano.',
+    en: 'Twelve days, 1–12 October 1999: the two subplinian eruptions, the 5th and the 7th. This is the window the piece is designed around. Not one hour of it is reconstructed, and on a ring this size each tidal cycle is about 13 mm at green size — cuttable by hand.',
   },
   fullWindow: {
-    es: 'Vuelve a la ventana y los radios por defecto: 26 sep – 31 dic, r₀ = 30, r₁ = 140 mm.',
-    en: 'Back to the default window and radii: 26 Sep – 31 Dec, r₀ = 30, r₁ = 140 mm.',
+    es: 'Los 97 días del encargo, del 26 de septiembre al 31 de diciembre, con las cinco erupciones. Cambia sólo las fechas, no los radios: en un anillo de este tamaño la marea se vuelve un peine imposible de cortar, y la comprobación lo dirá. Útil para mirar, no para construir.',
+    en: "The brief's 97 days, 26 September to 31 December, with all five eruptions. It changes the dates only, not the radii: on a ring this size the tide becomes a comb too fine to cut, and the check will say so. Useful for looking, not for building.",
   },
 
   // --------------------------------------------------------------- spiral
