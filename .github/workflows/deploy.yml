@@ -3,9 +3,8 @@
 # The data in public/data/ is committed, so the build does not need network
 # access to data.jma.go.jp — `npm run build:data` is a one-off step run by hand.
 #
-# Note: publishing Pages from a PRIVATE repository requires GitHub Pro, Team or
-# Enterprise. On a Free account the repository has to be public for the site to
-# be served.
+# The repository has to be public for Pages to publish on a Free account;
+# publishing from a private repository needs GitHub Pro, Team or Enterprise.
 name: Deploy to GitHub Pages
 
 on:
@@ -45,7 +44,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # enablement: true turns Pages on through the API on the first run, so the
+      # site does not have to be switched on by hand in the repository settings.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
