@@ -46,8 +46,19 @@ To re-download the raw JMA files and refresh their hashes:
 npm run fetch:jma
 ```
 
-Other scripts: `npm test` (133 tests), `npm run typecheck`, `npm run build`
-(static output in `dist/`, deployable to GitHub Pages or Netlify — no server).
+Other scripts: `npm test`, `npm run typecheck`, `npm run build` (static output
+in `dist/`, deployable to GitHub Pages or Netlify — no server).
+
+### Deploying
+
+`.github/workflows/deploy.yml` typechecks, tests, builds and publishes `dist/`
+to GitHub Pages on every push to `main`. It enables the Pages site itself on its
+first run, so nothing has to be switched on by hand. Vite's `base` is `./`, so
+the build works at a project-pages subpath without further configuration.
+
+The built data in `public/data/` is committed, so CI never needs to reach
+`data.jma.go.jp`. Pages publishes from a private repository only on GitHub Pro,
+Team or Enterprise; on a Free account the repository has to be public.
 
 ---
 
