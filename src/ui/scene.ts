@@ -28,8 +28,15 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BlendFunction, EffectComposer, EffectPass, RenderPass, SelectiveBloomEffect } from 'postprocessing';
 
 import type { Params } from '../geom/params.js';
-import { buildNotchOverlay, buildWallMesh, type Wall } from '../geom/wall.js';
+import { buildNotchOverlay, buildWallMesh, toThree, type Wall } from '../geom/wall.js';
 import type { Notch } from '../geom/notches.js';
+
+/** A point in plan plus a height, in fired mm — the space the geometry is in. */
+export interface PlanHeight {
+  x: number;
+  y: number;
+  h: number;
+}
 
 export type ViewPreset = 'plan' | 'threeQuarter' | 'elevation';
 
@@ -47,7 +54,7 @@ export interface SceneHandle {
   /** Diagnostics for the dev hook; not used by the app itself. */
   debug(): Record<string, unknown>;
   setWall(wall: Wall, params: Params): void;
-  setCursor(position: { x: number; y: number; height: number } | null): void;
+  setCursor(needle: { base: PlanHeight; tip: PlanHeight } | null): void;
   focusNotch(notch: Notch, wall: Wall): void;
   setView(preset: ViewPreset): void;
   setAutoRotate(enabled: boolean): void;
@@ -74,7 +81,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   scene.background = new Color(BG);
 
   const camera = new PerspectiveCamera(38, 1, 1, 8000);
-  camera.position.set(300, 350, 470);
+  camera.position.set(290, 300, 450);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -230,12 +237,24 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   requestAnimationFrame(frame);
 
   // ---- geometry updates -------------------------------------------------
+  // What the camera has to frame. A flat spiral is wide and low; a cylinder is
+  // narrow and tall, so the framing radius takes the greater of the two.
   let currentRadius = 160;
+  let currentHeight = 80;
+  /** The framing radius the camera was last placed for, to notice a big jump. */
+  let framedRadius = 0;
+  let lastPreset: ViewPreset = 'threeQuarter';
 
   const setWall = (wall: Wall, params: Params): void => {
     const mesh = buildWallMesh(wall, params);
     wallGeometry.setAttribute('position', new BufferAttribute(mesh.positions, 3));
     wallGeometry.setIndex(new BufferAttribute(mesh.indices, 1));
+    // computeVertexNormals REUSES an existing normal attribute rather than
+    // resizing it, so a mesh with more vertices than the last one would be
+    // drawn against a normal buffer too short for it — which WebGL refuses
+    // outright, and the piece simply disappears. Dropping the old one first
+    // makes it allocate at the new size.
+    wallGeometry.deleteAttribute('normal');
     wallGeometry.computeVertexNormals();
     wallGeometry.computeBoundingSphere();
 
@@ -244,40 +263,76 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
     notchGeometry.setIndex(new BufferAttribute(overlay.indices, 1));
     notchGeometry.computeBoundingSphere();
 
-    currentRadius = params.r1 + params.wallThickness;
+    currentHeight = Math.max(wall.totalHeightMm, 1);
+    // The wall knows its own widest point, which on the revolved form is the
+    // tide's crest rather than any radius parameter.
+    currentRadius = Math.max(
+      wall.outerRadiusMm + params.wallThickness / 2,
+      currentHeight * 0.55,
+    );
     const span = Math.max(currentRadius * 2.6, 240);
     key.shadow.camera.left = -span;
     key.shadow.camera.right = span;
     key.shadow.camera.top = span;
     key.shadow.camera.bottom = -span;
+    key.shadow.camera.far = Math.max(1400, currentRadius * 6);
     key.shadow.camera.updateProjectionMatrix();
     key.position.set(-currentRadius * 1.8, currentRadius * 3, currentRadius * 1.7);
+
+    // The revolved form's height follows the window, so one click on a preset
+    // can change the size of the piece by an order of magnitude. The orbit
+    // limits and the far plane have to follow it, or the camera runs out of
+    // room to stand back and the piece is simply cropped.
+    controls.minDistance = Math.max(90, currentRadius * 0.3);
+    controls.maxDistance = Math.max(1800, currentRadius * 10);
+    camera.far = Math.max(8000, currentRadius * 24);
+    camera.updateProjectionMatrix();
+
+    // And when the scale really has jumped, re-frame: a view set for a 300 mm
+    // pot shows nothing of a 4 m one.
+    const jumped = framedRadius > 0 && (currentRadius / framedRadius > 1.6 || framedRadius / currentRadius > 1.6);
+    if (jumped) setView(lastPreset);
   };
 
-  const setCursor = (position: { x: number; y: number; height: number } | null): void => {
-    if (!position) {
+  /**
+   * A thin needle through the piece at the cursor: two quads crossed along its
+   * own axis, so it reads from any angle.
+   *
+   * It takes a base and a tip rather than a point and a height, because the
+   * directions differ by mode: on a coil it stands up off the ground past the
+   * crest, and on the revolved form it points OUT of the circumference at the
+   * cursor's own height, which is where that moment's tide actually is.
+   */
+  const setCursor = (needle: { base: PlanHeight; tip: PlanHeight } | null): void => {
+    if (!needle) {
       cursorMesh.visible = false;
       return;
     }
-    // A thin blade standing on the wall at the cursor, 12 mm above the crest.
     const half = 0.5;
-    const top = position.height + 12;
-    const x = position.x;
-    const z = -position.y;
-    const positions = new Float32Array([
-      x - half, 0, z - half,
-      x + half, 0, z + half,
-      x + half, top, z + half,
-      x - half, 0, z - half,
-      x + half, top, z + half,
-      x - half, top, z - half,
-      x - half, 0, z + half,
-      x + half, 0, z - half,
-      x + half, top, z - half,
-      x - half, 0, z + half,
-      x + half, top, z - half,
-      x - half, top, z + half,
-    ]);
+    const from = new Vector3(...toThree(needle.base.x, needle.base.y, needle.base.h));
+    const to = new Vector3(...toThree(needle.tip.x, needle.tip.y, needle.tip.h));
+    const axis = to.clone().sub(from);
+    if (axis.lengthSq() < 1e-9) {
+      cursorMesh.visible = false;
+      return;
+    }
+    axis.normalize();
+    // Any direction across the needle will do; the seed only has to not lie
+    // along the axis itself.
+    const seed = Math.abs(axis.y) > 0.9 ? new Vector3(1, 0, 0) : new Vector3(0, 1, 0);
+    const across = new Vector3().crossVectors(axis, seed).normalize().multiplyScalar(half);
+    const other = new Vector3().crossVectors(axis, across).normalize().multiplyScalar(half);
+
+    const vertices: number[] = [];
+    for (const offset of [across, other]) {
+      const a = from.clone().sub(offset);
+      const b = from.clone().add(offset);
+      const c = to.clone().add(offset);
+      const d = to.clone().sub(offset);
+      vertices.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      vertices.push(a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    }
+    const positions = new Float32Array(vertices);
     cursorGeometry.setAttribute('position', new BufferAttribute(positions, 3));
     cursorGeometry.setIndex(null);
     cursorGeometry.computeBoundingSphere();
@@ -285,19 +340,30 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   };
 
   const setView = (preset: ViewPreset): void => {
+    lastPreset = preset;
+    framedRadius = currentRadius;
     // The camera's field of view is vertical, so on a portrait window the piece
     // has to be further away to fit across the narrow axis.
     const r = currentRadius * Math.max(1, 1 / Math.max(camera.aspect, 0.2));
+    // Look at the middle of the piece's own height, not at the ground, or a
+    // tall cylinder sits half out of frame.
+    // r is a radius but the piece is two of them across, so the standoffs are
+    // set against the diameter: a little over five radii away frames a piece
+    // at about half the frame height.
+    const midpoint = currentHeight / 2;
     switch (preset) {
       case 'plan':
-        moveCamera(new Vector3(0.001, r * 4.2, 0.001), new Vector3(0, 0, 0));
+        moveCamera(new Vector3(0.001, midpoint + r * 6.5, 0.001), new Vector3(0, midpoint, 0));
         break;
       case 'elevation':
-        moveCamera(new Vector3(0, r * 0.35, r * 4.0), new Vector3(0, r * 0.2, 0));
+        moveCamera(new Vector3(0, midpoint, r * 6.0), new Vector3(0, midpoint, 0));
         break;
       case 'threeQuarter':
       default:
-        moveCamera(new Vector3(r * 1.7, r * 2.0, r * 2.6), new Vector3(0, r * 0.1, 0));
+        moveCamera(
+          new Vector3(r * 2.6, midpoint + r * 2.5, r * 4.0),
+          new Vector3(0, midpoint, 0),
+        );
         break;
     }
   };
@@ -318,12 +384,24 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
     const floor = wall.top[index];
     const standoff = Math.max(crest * 2.4, 55);
 
-    const target = new Vector3(sample.x, floor * 0.9, -sample.y);
-    const position = new Vector3(
-      sample.x + sample.nx * standoff,
-      crest * 1.5 + 10,
-      -(sample.y + sample.ny * standoff),
-    );
+    // On the revolved form the cut is a ring round the circumference, so the
+    // camera looks level at it from outside rather than down into a slot: the
+    // notch sits at its own height, and its floor is a radius, not a depth.
+    const revolvedForm = wall.clock.revolved;
+    const target = revolvedForm
+      ? new Vector3(sample.x + sample.nx * floor, sample.z, -(sample.y + sample.ny * floor))
+      : new Vector3(sample.x, floor * 0.9, -sample.y);
+    const position = revolvedForm
+      ? new Vector3(
+          sample.x + sample.nx * (crest + standoff),
+          sample.z + crest * 0.8,
+          -(sample.y + sample.ny * (crest + standoff)),
+        )
+      : new Vector3(
+          sample.x + sample.nx * standoff,
+          crest * 1.5 + 10,
+          -(sample.y + sample.ny * standoff),
+        );
     moveCamera(position, target);
     lastInteraction = performance.now();
   };

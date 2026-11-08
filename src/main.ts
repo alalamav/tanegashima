@@ -173,6 +173,11 @@ async function main(): Promise<void> {
     );
     row(readoutValues, '', phaseLabel(phase)[lang], 'flag');
 
+    // The framing line names what each axis of the piece carries, and the
+    // revolved form swaps two of them round.
+    const framing = document.querySelector<HTMLElement>('.framing');
+    if (framing) framing.textContent = t(wall.clock.revolved ? 'framingRevolved' : 'framing', lang);
+
     // Wall height and position, so the readout describes the object too.
     if (clamped >= wall.clock.window.i0 && clamped <= wall.clock.window.i1) {
       const s = wall.spiral.arcLengthAtHour(clamped);
@@ -180,8 +185,17 @@ async function main(): Promise<void> {
         wall.spiral.samples.length - 1,
         Math.max(0, Math.round((s / wall.spiral.length) * (wall.spiral.samples.length - 1))),
       );
-      row(readoutValues, t('wallHeight', lang), `${wall.top[sampleIndex].toFixed(1)} mm`);
-      row(readoutValues, t('arcPosition', lang), `${s.toFixed(0)} mm`);
+      if (wall.clock.revolved) {
+        // On the revolved form the tide is a diameter and the arc is a height,
+        // so saying "wall height" and "position along the wall" would describe
+        // the wrong object.
+        const diameter = 2 * (params.r0 + wall.top[sampleIndex]);
+        row(readoutValues, t('vesselDiameter', lang), `${diameter.toFixed(1)} mm`);
+        row(readoutValues, t('axisPosition', lang), `${s.toFixed(0)} mm`);
+      } else {
+        row(readoutValues, t('wallHeight', lang), `${wall.top[sampleIndex].toFixed(1)} mm`);
+        row(readoutValues, t('arcPosition', lang), `${s.toFixed(0)} mm`);
+      }
     }
 
     const near = nearestEvent(clamped);
@@ -427,7 +441,22 @@ async function main(): Promise<void> {
           wall.spiral.samples.length - 1,
           Math.max(0, Math.round((s / wall.spiral.length) * (wall.spiral.samples.length - 1))),
         );
-        scene.setCursor({ x: sample.x, y: sample.y, height: wall.top[index] });
+        const relief = wall.top[index];
+        if (wall.clock.revolved) {
+          // The tide is radial here, so the needle comes out of the
+          // circumference at the cursor's own height instead of standing up
+          // from the ground.
+          const out = params.r0 + relief + 12;
+          scene.setCursor({
+            base: { x: sample.nx * params.r0, y: sample.ny * params.r0, h: sample.z },
+            tip: { x: sample.nx * out, y: sample.ny * out, h: sample.z },
+          });
+        } else {
+          scene.setCursor({
+            base: { x: sample.x, y: sample.y, h: 0 },
+            tip: { x: sample.x, y: sample.y, h: relief + 12 },
+          });
+        }
       } else {
         scene.setCursor(null);
       }

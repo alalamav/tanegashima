@@ -11,6 +11,16 @@
  *                lunar phase, with new moon at the seam, and a longer window is
  *                the same progression compressed into one turn. The radius is
  *                constant at r0; r1 has nowhere to grow to and is ignored.
+ *   cylinder     the revolved form, and the one mode that is not a coil at all.
+ *                theta is the unwrapped moon phase as in synodic mode, but it
+ *                drives HEIGHT rather than direction: the piece rises `pitchMm`
+ *                per turn, so one synodic month is one fixed slice of the axis
+ *                and the whole form is `turns` x pitch tall. The tide becomes
+ *                the RADIUS, measured out from r0, and the result is a surface
+ *                of revolution — a thrown vessel whose silhouette is the tide.
+ *                Every crest is a full circle of its own diameter, identical on
+ *                every side of the piece, which is what a profile pulled
+ *                against a turning wheel makes.
  *   synodic      theta = unwrapped moon phase. One turn = one synodic month.
  *                New moons land at 0 deg, full moons at 180 deg. Because the
  *                Moon's angular speed varies by about +/-12% over its orbit,
@@ -25,7 +35,7 @@
 
 import type { Series } from '../data/series.js';
 import { hourIndexOf } from '../data/series.js';
-import type { ClockMode, Params } from './params.js';
+import { growsOutward, revolved, type ClockMode, type Params } from './params.js';
 
 const DEG = Math.PI / 180;
 
@@ -42,6 +52,15 @@ export interface Clock {
   mode: ClockMode;
   /** True when the first and last samples join: a ring rather than a spiral. */
   closed: boolean;
+  /** True when every turn has the same radius: the ring and the cylinder. */
+  constantRadius: boolean;
+  /**
+   * True for the revolved form: the path runs up the axis and the signal is
+   * radial, so the piece is axisymmetric rather than a coil.
+   */
+  revolved: boolean;
+  /** Rise per turn along z, mm. Zero for every mode but the cylinder. */
+  climbMmPerTurn: number;
   window: ClockWindow;
   /** Unwrapped angle in radians at a (possibly fractional) hour index. */
   thetaAt(hourIndex: number): number;
@@ -97,6 +116,7 @@ export function makeClock(series: Series, params: Params): Clock {
         span === 0 ? 0 : ((phaseDegAt(series, hourIndex) - phaseStart) / span) * 2 * Math.PI;
       break;
     }
+    case 'cylinder':
     case 'synodic':
       thetaAt = (hourIndex) => (phaseDegAt(series, hourIndex) - phaseStart) * DEG;
       break;
@@ -118,6 +138,9 @@ export function makeClock(series: Series, params: Params): Clock {
   return {
     mode: params.clockMode,
     closed,
+    constantRadius: !growsOutward(params.clockMode),
+    revolved: revolved(params.clockMode),
+    climbMmPerTurn: revolved(params.clockMode) ? params.pitchMm : 0,
     window,
     thetaAt,
     thetaStart,

@@ -7,10 +7,11 @@ import type { VolcanoEvent } from '../data/series.js';
 import type { MeshData, Wall } from './wall.js';
 import {
   greenScale,
-  isSpiral,
+  growsOutward,
   outerRadius,
   outerRadiusKey,
   PARAM_RANGES,
+  revolved,
   snapDown,
   snapUp,
   SHORT_WINDOW_PRESET,
@@ -19,7 +20,11 @@ import {
 import {
   approximateLength,
   maxGainForHeight,
+  maxPitchForKiln,
   maxWindowHoursForFeature,
+  gainForSlope,
+  pitchForProfileLength,
+  pitchForSlope,
   radiusScaleForLength,
   turnGuidance,
   turnsForLength,
@@ -78,6 +83,14 @@ export interface Measures {
   wallHeightMinMm: number;
   wallHeightMaxMm: number;
   turns: number;
+  /** Topmost point above the ground, mm. */
+  totalHeightMm: number;
+  /** Steepest slope of the revolved silhouette. Zero on a coil. */
+  maxSlope: number;
+  /** Thickest section the revolved form forces, mm. Zero on a coil. */
+  maxClayMm: number;
+  /** Height gained per hour on the revolved form, mm. Zero on a coil. */
+  mmPerHour: number;
   windowHours: number;
   notchCount: number;
   sampleCount: number;
@@ -86,8 +99,10 @@ export interface Measures {
 export function measure(wall: Wall, params: Params): Measures {
   const windowHours = wall.clock.window.count - 1;
   return {
-    firedOuterDiameterMm: 2 * (outerRadius(params) + params.wallThickness / 2),
-    greenOuterDiameterMm: 2 * (outerRadius(params) + params.wallThickness / 2) * greenScale(params),
+    // The widest point of the piece, which the wall itself knows: on the
+    // revolved form the tide is radial, so the crest decides the diameter.
+    firedOuterDiameterMm: 2 * wall.outerRadiusMm,
+    greenOuterDiameterMm: 2 * wall.outerRadiusMm * greenScale(params),
     turnSpacingMm: wall.spiral.turnSpacing,
     centerlineLengthMm: wall.spiral.length,
     // One semidiurnal cycle occupies this much arc length, on average.
@@ -95,6 +110,10 @@ export function measure(wall: Wall, params: Params): Measures {
     wallHeightMinMm: wall.heightRange.min,
     wallHeightMaxMm: wall.heightRange.max,
     turns: wall.spiral.turns,
+    totalHeightMm: wall.totalHeightMm,
+    maxSlope: wall.profile?.maxSlope ?? 0,
+    maxClayMm: wall.profile?.maxClayMm ?? 0,
+    mmPerHour: wall.profile?.mmPerHour ?? 0,
     windowHours,
     notchCount: wall.notches.length,
     sampleCount: wall.spiral.samples.length,
@@ -135,6 +154,31 @@ const up = (value: number, decimals = 1): string => {
  */
 const show = (value: number): string => String(value);
 
+
+/**
+ * A window end the panel can actually hold.
+ *
+ * The dates are edited as whole days, and the panel stores the end as 23:00 of
+ * the day chosen. A suggestion that lands mid-day would be rounded FORWARD to
+ * 23:00 as soon as the panel refreshed — up to twenty-three hours of piece
+ * nobody asked for, which on the revolved form is up to twenty-three hours of
+ * extra height, enough to push a piece straight back out of the kiln it had
+ * just been brought into. So a suggested end is floored to the last whole day
+ * that fits, and written in the panel's own form.
+ */
+function windowEndAfter(startUtc: string, hours: number): string {
+  const start = Date.parse(startUtc);
+  const target = start + hours * 3_600_000;
+  const end = new Date(target);
+  end.setUTCHours(23, 0, 0, 0);
+  if (end.getTime() > target) end.setUTCDate(end.getUTCDate() - 1);
+  // The clock needs at least 24 h, whatever the arithmetic asked for.
+  const floor = new Date(start);
+  floor.setUTCHours(23, 0, 0, 0);
+  if (floor.getTime() < start + 24 * 3_600_000) floor.setUTCDate(floor.getUTCDate() + 1);
+  return new Date(Math.max(end.getTime(), floor.getTime())).toISOString();
+}
+
 export function runChecks(wall: Wall, params: Params): { checks: Check[]; measures: Measures } {
   const m = measure(wall, params);
   const guidance = turnGuidance(params, m.turns, m.windowHours);
@@ -156,7 +200,7 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
   // not apply at all in circle mode and is left out rather than reported as a
   // meaningless pass.
   const needed = params.wallThickness + params.clearanceMm;
-  if (isSpiral(params.clockMode)) {
+  if (growsOutward(params.clockMode)) {
     const spacingOk = atLeast(m.turnSpacingMm, needed);
 
     // Widening r₁ is the obvious lever, but it must not push the piece out of
@@ -249,6 +293,84 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
       fix: spacingFix,
     });
   }
+  // ------------------------------------------------------------------- 1b
+  // The revolved form has no neighbouring turn to be spaced from: its turns are
+  // slices of the axis, not rings beside each other. The same question — is
+  // there room for the tide — is asked of the SILHOUETTE instead, as its slope.
+  //
+  // The slope is what a rib has to follow on the wheel, and it is also what
+  // decides how thick the clay has to get: the inner surface is eroded in by a
+  // disc of the wall thickness, and that erosion can force at most
+  // t x sqrt(1 + slope^2) of clay. 2 : 1 is a steep flute that still comes out
+  // at 2.2 walls of clay, which is ordinary thrown thickness; past 3 : 1 the
+  // clay is over three walls thick in places and drying a section like that
+  // next to a thin one is what cracks pieces.
+  if (revolved(params.clockMode)) {
+    const slope = m.maxSlope;
+    const gentle = 2;
+    const steep = 3;
+    const profileLevel: CheckLevel = atMost(slope, gentle)
+      ? 'ok'
+      : atMost(slope, steep)
+        ? 'warn'
+        : 'fail';
+
+    // Both levers are exact: the slope goes as k and as 1 / pitch.
+    const wantedPitch = snapUp('pitchMm', pitchForSlope(params.pitchMm, slope, gentle));
+    const pitchCap = snapDown('pitchMm', maxPitchForKiln(params, m.turns));
+    const pitchFits = wantedPitch <= pitchCap && wantedPitch > params.pitchMm;
+    const gentlerKRaw = gainForSlope(params.k, slope, gentle);
+    const gentlerK = snapDown('k', gentlerKRaw);
+    const kWorks = gentlerKRaw >= PARAM_RANGES.k.min;
+
+    let profileFix: CheckFix | null = null;
+    let profileLeverEs = '';
+    let profileLeverEn = '';
+    if (profileLevel !== 'ok') {
+      if (pitchFits) {
+        const taller = (m.totalHeightMm * wantedPitch) / Math.max(params.pitchMm, 1e-9);
+        profileFix = {
+          patch: { pitchMm: wantedPitch },
+          labelEs: `paso → ${show(wantedPitch)} mm`,
+          labelEn: `pitch → ${show(wantedPitch)} mm`,
+        };
+        profileLeverEs = `Suba el paso a ${show(wantedPitch)} mm (ahora ${n(params.pitchMm, 0)}) para darle altura a cada marea: la pieza pasa a ${up(taller, 0)} mm de alto y la marea conserva su tamaño`;
+        profileLeverEn = `Raise the pitch to ${show(wantedPitch)} mm (now ${n(params.pitchMm, 0)}) to give each tide room up the axis: the piece goes to ${up(taller, 0)} mm tall and the tide keeps its size`;
+      } else if (kWorks) {
+        profileFix = {
+          patch: { k: gentlerK },
+          labelEs: `k → ${gentlerK} mm/cm`,
+          labelEn: `k → ${gentlerK} mm/cm`,
+        };
+        profileLeverEs = `El horno no admite más de ${show(pitchCap)} mm por vuelta con esta ventana, así que aplane la marea en vez de estirarla: baje k a ${gentlerK} mm/cm (ahora ${n(params.k, 2)})`;
+        profileLeverEn = `The kiln will not take more than ${show(pitchCap)} mm per turn at this window, so flatten the tide instead of stretching it: drop k to ${gentlerK} mm/cm (now ${n(params.k, 2)})`;
+      } else {
+        profileLeverEs = `Con esta ventana el horno limita el paso a ${show(pitchCap)} mm y k ya está en el mínimo. Acorte la ventana: así el paso puede subir sin que la pieza crezca`;
+        profileLeverEn = `At this window the kiln caps the pitch at ${show(pitchCap)} mm and k is already at its floor. Shorten the window: that lets the pitch rise without the piece growing`;
+      }
+    }
+
+    checks.push({
+      id: 'profile',
+      labelEs: 'Pendiente del perfil',
+      labelEn: 'Profile slope',
+      level: profileLevel,
+      value: `${n(slope, 2)} : 1`,
+      limit: `≤ ${n(gentle, 2)} : 1`,
+      explainEs: `Pendiente máxima de la silueta, mm de radio por mm de altura, medida sobre la curva horaria. Es lo que una terraja tiene que poder seguir en el torno, y también lo que decide el grosor: la cara interior se erosiona con un disco del espesor del muro, y eso obliga como mucho a espesor × √(1 + pendiente²) de barro. Ahora mismo, ${n(m.maxClayMm)} mm en el punto más gordo.`,
+      explainEn: `Steepest slope of the silhouette, mm of radius per mm of height, measured on the hourly curve. It is what a rib has to follow on the wheel, and it is also what sets the thickness: the inner surface is eroded in by a disc of the wall thickness, and that forces at most thickness × √(1 + slope²) of clay. Right now, ${n(m.maxClayMm)} mm at the thickest.`,
+      adviceEs:
+        profileLevel === 'ok'
+          ? null
+          : `${profileLeverEs}. El barro llega a ${n(m.maxClayMm)} mm donde el muro mide ${n(params.wallThickness)} mm; secar una sección así junto a una fina es lo que raja las piezas.`,
+      adviceEn:
+        profileLevel === 'ok'
+          ? null
+          : `${profileLeverEn}. The clay reaches ${n(m.maxClayMm)} mm where the wall is ${n(params.wallThickness)} mm; drying a section like that next to a thin one is what cracks pieces.`,
+      fix: profileFix,
+    });
+  }
+
   // --------------------------------------------------------------------- 2
   // The green piece has to fit the kiln.
   const kilnOk = atMost(m.greenOuterDiameterMm, params.kilnLimitMm);
@@ -256,7 +378,12 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
   // spiral, r₀ for a ring.
   const outerKey = outerRadiusKey(params);
   const outerName = outerKey === 'r1' ? 'r₁' : 'r₀';
-  const kilnRadius = snapDown(outerKey, guidance.maxOuterRadiusMm);
+  // On the revolved form r₀ is only the core: the crest stands proud of it, and
+  // that relief is what has to come out of the kiln's allowance first.
+  const reliefOutward = m.firedOuterDiameterMm / 2 - outerRadius(params);
+  const kilnRadiusRaw = guidance.maxOuterRadiusMm - reliefOutward;
+  const kilnRadius = snapDown(outerKey, kilnRadiusRaw);
+  const kilnRadiusWorks = kilnRadiusRaw >= PARAM_RANGES[outerKey].min;
   checks.push({
     id: 'kiln',
     labelEs: 'Diámetro en crudo',
@@ -274,13 +401,14 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     adviceEn: kilnOk
       ? null
       : `Drop ${outerName} to ${show(kilnRadius)} mm (now ${n(outerRadius(params))}), or raise the kiln limit to ${up(m.greenOuterDiameterMm)} mm if it really fits.`,
-    fix: kilnOk
-      ? null
-      : {
-          patch: { [outerKey]: kilnRadius } as Partial<Params>,
-          labelEs: `${outerName} → ${show(kilnRadius)} mm`,
-          labelEn: `${outerName} → ${show(kilnRadius)} mm`,
-        },
+    fix:
+      kilnOk || !kilnRadiusWorks
+        ? null
+        : {
+            patch: { [outerKey]: kilnRadius } as Partial<Params>,
+            labelEs: `${outerName} → ${show(kilnRadius)} mm`,
+            labelEn: `${outerName} → ${show(kilnRadius)} mm`,
+          },
   });
 
   // --------------------------------------------------------------------- 3
@@ -300,7 +428,10 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
 
   // A ring can only grow until the kiln stops it. Once there, the remaining
   // lever is time: fewer hours around the same circumference.
-  const ringRadius = snapUp('r0', (targetLength / (2 * Math.PI)));
+  // The radius that makes the wall long enough: the target length shared out
+  // over however many turns there are, which is one for a ring and several for
+  // a cylinder.
+  const ringRadius = snapUp('r0', targetLength / (2 * Math.PI * Math.max(Math.abs(m.turns), 1e-9)));
   const ringCap = snapDown('r0', guidance.maxOuterRadiusMm);
   const ringFits = ringRadius <= ringCap;
   const hoursThatFit = Math.max(
@@ -314,7 +445,40 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
   let featureFix: CheckFix;
   let featureLeverEs: string;
   let featureLeverEn: string;
-  if (!isSpiral(params.clockMode)) {
+  if (revolved(params.clockMode)) {
+    // The revolved form's wavelength is mm of height per tidal cycle, and the
+    // pitch is the only thing that sets it: the window changes how MUCH record
+    // the piece carries, not how much room each tide gets. So the lever is the
+    // pitch, and the kiln is what stops it.
+    const wantedPitch = snapUp('pitchMm', pitchForProfileLength(targetLength, m.turns));
+    const pitchCeiling = snapDown('pitchMm', maxPitchForKiln(params, m.turns));
+    if (wantedPitch <= pitchCeiling) {
+      featureFix = {
+        patch: { pitchMm: wantedPitch },
+        labelEs: `paso → ${show(wantedPitch)} mm`,
+        labelEn: `pitch → ${show(wantedPitch)} mm`,
+      };
+      featureLeverEs = `Suba el paso a ${show(wantedPitch)} mm para que el perfil mida ${up(targetLength)} mm de alto (ahora ${n(m.centerlineLengthMm)})`;
+      featureLeverEn = `Raise the pitch to ${show(wantedPitch)} mm so the profile stands ${up(targetLength)} mm tall (now ${n(m.centerlineLengthMm)})`;
+    } else {
+      // The kiln caps the height, so the two have to move together: give each
+      // tide the room it needs, then shorten the window until the piece fits.
+      const neededMmPerHour = (params.minFeatureMm * 1.55) / M2_PERIOD_HOURS;
+      const hoursPerTurn = m.windowHours / Math.max(Math.abs(m.turns), 1e-9);
+      const pitchForTide = snapUp('pitchMm', neededMmPerHour * hoursPerTurn);
+      const firedLimit = params.kilnLimitMm * (1 - params.shrinkagePct / 100);
+      // Same allowance for the Moon's uneven pace as the piece-height check.
+      const hoursInKiln = Math.max(24, Math.floor(firedLimit / (neededMmPerHour * 1.15)));
+      const tighterEnd = windowEndAfter(params.windowStartUtc, hoursInKiln);
+      featureFix = {
+        patch: { pitchMm: pitchForTide, windowEndUtc: tighterEnd },
+        labelEs: `paso → ${show(pitchForTide)} mm, ventana → ${Math.floor(hoursInKiln / 24)} días`,
+        labelEn: `pitch → ${show(pitchForTide)} mm, window → ${Math.floor(hoursInKiln / 24)} days`,
+      };
+      featureLeverEs = `El horno no admite más de ${show(pitchCeiling)} mm por vuelta con esta ventana, así que mueva los dos: paso ${show(pitchForTide)} mm y ventana de ${Math.floor(hoursInKiln / 24)} días`;
+      featureLeverEn = `The kiln will not take more than ${show(pitchCeiling)} mm per turn at this window, so move both: pitch ${show(pitchForTide)} mm and a ${Math.floor(hoursInKiln / 24)}-day window`;
+    }
+  } else if (!growsOutward(params.clockMode)) {
     if (ringFits) {
       featureFix = {
         patch: { r0: ringRadius },
@@ -360,18 +524,24 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     level: featureLevel,
     value: `${n(m.tideWavelengthMm)} mm`,
     limit: `≥ ${n(params.minFeatureMm)} mm`,
-    explainEs:
-      'Arco que ocupa un ciclo de marea (12,42 h) sobre el borde superior: longitud × 12,42 ÷ horas de la ventana. Por debajo del detalle mínimo la marea deja de leerse en la arcilla.',
-    explainEn:
-      'Arc one tidal cycle (12.42 h) occupies along the top edge: length × 12.42 ÷ window hours. Below the minimum feature the tide stops reading in clay.',
+    explainEs: revolved(params.clockMode)
+      ? 'Altura que ocupa un ciclo de marea (12,42 h) sobre el perfil: altura × 12,42 ÷ horas de la ventana. Por debajo del detalle mínimo la marea deja de leerse en la arcilla. Aquí lo fija el paso, no la ventana.'
+      : 'Arco que ocupa un ciclo de marea (12,42 h) sobre el borde superior: longitud × 12,42 ÷ horas de la ventana. Por debajo del detalle mínimo la marea deja de leerse en la arcilla.',
+    explainEn: revolved(params.clockMode)
+      ? 'Height one tidal cycle (12.42 h) occupies up the profile: height × 12.42 ÷ window hours. Below the minimum feature the tide stops reading in clay. Here the pitch sets it, not the window.'
+      : 'Arc one tidal cycle (12.42 h) occupies along the top edge: length × 12.42 ÷ window hours. Below the minimum feature the tide stops reading in clay.',
     adviceEs:
       featureLevel === 'ok'
         ? null
-        : `${featureLeverEs}. O acorte la ventana a ≤ ${Math.floor(maxHours / 24)} días. O acepte el tamaño y suba el suavizado por encima de ${n(params.minFeatureMm)} mm para quitar la oscilación fina a propósito.`,
+        : revolved(params.clockMode)
+          ? `${featureLeverEs}. Acortar la ventana no sirve aquí: la pieza se acorta pero cada marea ocupa lo mismo. O acepte el tamaño y suba el suavizado por encima de ${n(params.minFeatureMm)} mm para quitar la oscilación fina a propósito.`
+          : `${featureLeverEs}. O acorte la ventana a ≤ ${Math.floor(maxHours / 24)} días. O acepte el tamaño y suba el suavizado por encima de ${n(params.minFeatureMm)} mm para quitar la oscilación fina a propósito.`,
     adviceEn:
       featureLevel === 'ok'
         ? null
-        : `${featureLeverEn}. Or shorten the window to ≤ ${Math.floor(maxHours / 24)} days. Or accept the size and raise the smoothing above ${n(params.minFeatureMm)} mm to drop the fine oscillation on purpose.`,
+        : revolved(params.clockMode)
+          ? `${featureLeverEn}. Shortening the window does not help here: the piece gets shorter but each tide still gets the same room. Or accept the size and raise the smoothing above ${n(params.minFeatureMm)} mm to drop the fine oscillation on purpose.`
+          : `${featureLeverEn}. Or shorten the window to ≤ ${Math.floor(maxHours / 24)} days. Or accept the size and raise the smoothing above ${n(params.minFeatureMm)} mm to drop the fine oscillation on purpose.`,
     fix: featureLevel === 'ok' ? null : featureFix,
   });
 
@@ -387,15 +557,17 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     : { patch: { hBase: safeBase }, labelEs: `h_base → ${show(safeBase)} mm`, labelEn: `h_base → ${show(safeBase)} mm` };
   checks.push({
     id: 'wallHeight',
-    labelEs: 'Altura del muro',
-    labelEn: 'Wall height',
+    labelEs: revolved(params.clockMode) ? 'Relieve de la marea' : 'Altura del muro',
+    labelEn: revolved(params.clockMode) ? 'Tide relief' : 'Wall height',
     level: heightOk ? 'ok' : 'fail',
     value: `${n(m.wallHeightMinMm)}–${n(m.wallHeightMaxMm)} mm`,
     limit: `≤ ${n(params.maxHeightMm)} mm`,
-    explainEs:
-      'Altura del borde superior ya con las muescas: h_base en la bajamar más k por cada cm de marea. El máximo es lo que un muro de losa aguanta de pie.',
-    explainEn:
-      'Height of the top edge with the notches already cut: h_base at low water plus k per cm of tide. The maximum is what a slab wall will stand up in.',
+    explainEs: revolved(params.clockMode)
+      ? 'Cuánto sale la marea del radio base, ya con las muescas: h_base en la bajamar más k por cada cm de marea. Es lo que separa la cintura del vientre de la pieza.'
+      : 'Altura del borde superior ya con las muescas: h_base en la bajamar más k por cada cm de marea. El máximo es lo que un muro de losa aguanta de pie.',
+    explainEn: revolved(params.clockMode)
+      ? 'How far the tide stands out from the core radius, with the notches already cut: h_base at low water plus k per cm of tide. It is the difference between the piece\'s waist and its belly.'
+      : 'Height of the top edge with the notches already cut: h_base at low water plus k per cm of tide. The maximum is what a slab wall will stand up in.',
     adviceEs: heightOk
       ? null
       : tooTall
@@ -409,6 +581,67 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     fix: heightOk ? null : heightFix,
   });
 
+  // -------------------------------------------------------------------- 5a
+  // The revolved form is not built as a length of wall at all: it is thrown or
+  // coiled up as one vessel, so what is scarce is the HEIGHT of the kiln rather
+  // than the hours at the bench. The window and the height are the same knob
+  // here — the pitch fixes the mm per hour, so fewer hours is a shorter piece
+  // with the tide unchanged — which makes the window the honest lever.
+  if (revolved(params.clockMode)) {
+    const greenHeight = m.totalHeightMm * greenScale(params);
+    const fits = atMost(greenHeight, params.kilnLimitMm);
+    const firedLimit = params.kilnLimitMm * (1 - params.shrinkagePct / 100);
+    // mm per hour is a WINDOW AVERAGE, and the piece rises with the Moon's
+    // phase rather than with the clock: the same hours near perigee are up to
+    // about 12% taller than near apogee. So the suggested window keeps that
+    // much in hand, or the one click would land just outside the kiln again.
+    const unevenMoon = 1.15;
+    const hoursInKiln = Math.max(
+      24,
+      Math.floor(firedLimit / Math.max(m.mmPerHour * unevenMoon, 1e-9)),
+    );
+    const kilnEnd = windowEndAfter(params.windowStartUtc, hoursInKiln);
+    const kilnHours = (Date.parse(kilnEnd) - Date.parse(params.windowStartUtc)) / 3_600_000;
+    const shortEnough = kilnHours < m.windowHours;
+    const shorterPitch = snapDown('pitchMm', maxPitchForKiln(params, m.turns));
+
+    checks.push({
+      id: 'pieceHeight',
+      labelEs: 'Altura de la pieza',
+      labelEn: 'Piece height',
+      level: fits ? 'ok' : 'fail',
+      value: `${n(greenHeight)} mm`,
+      limit: `≤ ${n(params.kilnLimitMm)} mm`,
+      explainEs:
+        'Alto en crudo de la pieza entera: vueltas × paso ÷ (1 − contracción). Se compara con la misma medida del horno que el diámetro, porque es la cámara la que tiene que admitirla de pie.',
+      explainEn:
+        'Green height of the whole piece: turns × pitch ÷ (1 − shrinkage). It is held against the same kiln measure as the diameter, because it is the chamber that has to take it standing up.',
+      adviceEs: fits
+        ? null
+        : shortEnough
+          ? `Acorte la ventana a ${Math.round(kilnHours / 24)} días: la pieza baja a ${down(kilnHours * m.mmPerHour * greenScale(params))} mm en crudo y la marea no cambia de forma, porque los mm por hora los fija el paso.`
+          : `Baje el paso a ${show(shorterPitch)} mm. Con esta ventana no hay recorte que baste, pero ojo: bajar el paso cierra la curvatura del perfil.`,
+      adviceEn: fits
+        ? null
+        : shortEnough
+          ? `Shorten the window to ${Math.round(kilnHours / 24)} days: the piece comes down to ${down(kilnHours * m.mmPerHour * greenScale(params))} mm green and the tide does not change shape at all, because the pitch is what fixes the mm per hour.`
+          : `Drop the pitch to ${show(shorterPitch)} mm. No amount of trimming this window will do it — but mind that a lower pitch tightens the profile's curvature.`,
+      fix: fits
+        ? null
+        : shortEnough
+          ? {
+              patch: { windowEndUtc: kilnEnd },
+              labelEs: `ventana → ${Math.round(kilnHours / 24)} días`,
+              labelEn: `window → ${Math.round(kilnHours / 24)} days`,
+            }
+          : {
+              patch: { pitchMm: shorterPitch },
+              labelEs: `paso → ${show(shorterPitch)} mm`,
+              labelEn: `pitch → ${show(shorterPitch)} mm`,
+            },
+    });
+  }
+
   // --------------------------------------------------------------------- 5
   // Handwork: how much wall there is to build.
   const lengthLevel: CheckLevel = atMost(m.centerlineLengthMm, 1200)
@@ -418,7 +651,7 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
       : 'fail';
   const comfortableTurns = snapDown('linearTurns', turnsForLength(params.r0, params.r1, 1200));
   const comfortableScale = Number(down(radiusScaleForLength(m.centerlineLengthMm, 1200), 2));
-  const comfortableRing = snapDown('r0', 1200 / (2 * Math.PI));
+  const comfortableRing = snapDown('r0', 1200 / (2 * Math.PI * Math.max(m.turns, 1e-9)));
   // The short window is the brief's own answer to a long wall, so it leads
   // whenever the window is long enough for it to be a real change. In linear
   // mode the window sets no length at all — the turns do — so it is skipped
@@ -436,7 +669,7 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
   let lengthFix: CheckFix;
   let lengthLeverEs: string;
   let lengthLeverEn: string;
-  if (!isSpiral(params.clockMode)) {
+  if (!growsOutward(params.clockMode)) {
     lengthFix = {
       patch: { r0: comfortableRing },
       labelEs: `r₀ → ${show(comfortableRing)} mm`,
@@ -474,7 +707,9 @@ export function runChecks(wall: Wall, params: Params): { checks: Check[]; measur
     lengthLeverEn = `Multiply r₀ and r₁ by ${comfortableScale}`;
   }
 
-  checks.push({
+  // Only the coiled forms are built as a strip of wall; the revolved form
+  // reports its height above instead.
+  if (!revolved(params.clockMode)) checks.push({
     id: 'wallLength',
     labelEs: 'Longitud del muro',
     labelEn: 'Wall length',

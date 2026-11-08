@@ -8,7 +8,7 @@
  */
 
 import type { BuildMeta, Series, VolcanoEvent } from '../data/series.js';
-import { configHash, greenScale, type Params } from '../geom/params.js';
+import { configHash, greenScale, revolved, type Params } from '../geom/params.js';
 import { measure, runChecks, checkManifold } from '../geom/validate.js';
 import { buildWallMesh, type Wall } from '../geom/wall.js';
 import { precisionLabel, type Lang } from '../i18n/strings.js';
@@ -23,9 +23,53 @@ export const EQUATIONS = [
   'r(theta) = r0 + (r1 - r0) (theta - theta_start) / (theta_end - theta_start)',
   'P(theta) = ( r cos(theta + theta_ref), r sin(theta + theta_ref) )',
   'h(t) = h_base + k ( s(t) - s_min )',
+  'z(t) = pitch (theta(t) - theta_start) / 2pi   [revolved: theta drives height, not direction]',
+  'R(z) = r0 + h(t(z)),   P = ( R cos phi, R sin phi, z ) for phi in [0, 2pi)   [revolved]',
+  'R_in(z) = min over |dz| <= t_wall of [ R(z + dz) - sqrt(t_wall^2 - dz^2) ]   [revolved bore]',
   'notch depth d = d_0 + k_e * plume_km   [instant]   |   d_0 / 2   [day precision]',
   'green size = fired size / (1 - shrinkage)',
 ];
+
+
+/**
+ * What each dimension of THIS configuration carries.
+ *
+ * It is not one sentence per mode out of tidiness: the revolved form genuinely
+ * swaps two of the rows round — the Moon runs up the axis and the tide becomes
+ * the radius — and a spec sheet that said otherwise would be describing a
+ * different object from the one its own mesh exports.
+ */
+function mappingFor(params: Params): Record<string, string> {
+  const angle =
+    params.clockMode === 'linear'
+      ? 'uniform in time (control mode; nothing is aligned)'
+      : params.clockMode === 'springNeap'
+        ? '2 x lunar phase, unwrapped; 0 deg = new moon and full moon alike'
+        : params.clockMode === 'circle'
+          ? 'lunar phase, scaled so the window is exactly one turn; 0 deg = new moon at the seam'
+          : 'lunar phase, unwrapped; 0 deg = new moon';
+  const signal = `${params.signal}, Tanegashima observed hourly sea level`;
+
+  if (revolved(params.clockMode)) {
+    return {
+      height: `${angle} — on this form the phase drives HEIGHT: ${params.pitchMm} mm of rise per synodic month`,
+      radius: `${signal}, measured out from the core radius r0`,
+      angle: 'none: the piece is a surface of revolution, identical on every side',
+      wall: 'constant thickness where the profile allows, eroded inward by a disc of t_wall where it does not',
+      notches: 'Pichincha eruptions, at their UTC instant; a ring cut round the whole piece, deeper for a taller plume',
+    };
+  }
+
+  return {
+    angle,
+    radius:
+      params.clockMode === 'circle'
+        ? 'constant at r0: the wall closes into a ring'
+        : 'elapsed time, linear in the angle',
+    height: signal,
+    notches: 'Pichincha eruptions, at their UTC instant; deeper for a taller plume',
+  };
+}
 
 export interface SpecSheet {
   piece: {
@@ -99,15 +143,7 @@ export function buildSpec(
       configHash: configHash(params),
       codeVersion: meta.scriptVersion,
     },
-    mapping: {
-      angle:
-        params.clockMode === 'linear'
-          ? 'uniform in time (control mode; nothing is aligned)'
-          : `${params.clockMode === 'synodic' ? 'lunar phase, unwrapped' : '2 x lunar phase, unwrapped'}; 0 deg = new moon`,
-      radius: 'elapsed time, linear in the angle',
-      height: `${params.signal}, Tanegashima observed hourly sea level`,
-      notches: 'Pichincha eruptions, at their UTC instant; deeper for a taller plume',
-    },
+    mapping: mappingFor(params),
     params,
     derived: {
       ...m,

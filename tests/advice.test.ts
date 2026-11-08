@@ -277,7 +277,7 @@ describe('help text', () => {
 
   const PANEL_KEYS = [
     'clockMode', 'linearTurns', 'windowStart', 'windowEnd', 'shortWindow', 'fullWindow',
-    'r0', 'r1', 'thetaRef', 'arcStep',
+    'r0', 'r1', 'pitch', 'thetaRef', 'arcStep',
     'signal', 'hBase', 'k', 'smoothing', 'wallThickness', 'baseDisc',
     'notchWidth', 'notchDepth0', 'notchDepthPerKm',
     'shrinkage', 'kilnLimit', 'clearance', 'minFeature', 'maxHeight', 'stripMax', 'pageSize',
@@ -377,6 +377,9 @@ describe('one-click fixes', () => {
     ['vase window, tiny radii', { ...SHORT_WINDOW_PRESET, r0: 8, r1: 20 }],
     ['thick wall, no clearance room', { wallThickness: 18, clearanceMm: 30 }],
     ['spring–neap at ring radii', { clockMode: 'springNeap' as const, r0: 160, r1: 260 }],
+    ['cylinder, whole record', { ...DEFAULT_PARAMS, clockMode: 'cylinder' as const, ...FULL_WINDOW_PRESET }],
+    ['cylinder, pitch far too low', { ...DEFAULT_PARAMS, clockMode: 'cylinder' as const, pitchMm: 10 }],
+    ['cylinder, tiny radius', { ...DEFAULT_PARAMS, clockMode: 'cylinder' as const, r0: 15 }],
     ['linear 12 turns at ring radii', { clockMode: 'linear' as const, linearTurns: 12, r0: 160, r1: 260 }],
     ['smallest radii the panel allows', { r0: 5, r1: 20 }],
   ];

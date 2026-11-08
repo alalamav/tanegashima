@@ -14,7 +14,10 @@ const series = JSON.parse(readFileSync(resolve(dataDir, 'series.json'), 'utf8'))
 const events = JSON.parse(readFileSync(resolve(dataDir, 'events.json'), 'utf8')) as VolcanoEvent[];
 const meta = JSON.parse(readFileSync(resolve(dataDir, 'build-meta.json'), 'utf8')) as BuildMeta;
 
-const params: Params = { ...DEFAULT_PARAMS };
+// The sheet tests below are about a PLAN and a wall unrolled along it, so they
+// pin the ring. The revolved form the site opens on prints a profile instead,
+// and has its own block at the end of the file.
+const params: Params = { ...DEFAULT_PARAMS, clockMode: 'circle', hBase: 15, k: 0.25 };
 const wall = buildWall(series, events, params);
 
 describe('binary STL', () => {
@@ -241,5 +244,83 @@ describe('spec sheet', () => {
   it('passes every build check it carries forward', () => {
     expect(spec.data.buildChecks.every((check) => check.pass)).toBe(true);
     expect(spec.data.buildChecks.length).toBeGreaterThan(20);
+  });
+});
+
+describe('revolved templates and mesh', () => {
+  const vessel: Params = { ...DEFAULT_PARAMS };
+  const piece = buildWall(series, events, vessel);
+  const rib = planSheet(piece, vessel, series, 'es');
+  const ribEn = planSheet(piece, vessel, series, 'en');
+
+  it('prints a rib instead of a plan', () => {
+    expect(rib.id).toBe('plan');
+    expect(rib.svg).toContain('PERFIL 1:1 (TERRAJA)');
+    expect(rib.svg).toContain('eje de revolución');
+    expect(ribEn.svg).toContain('PROFILE 1:1 (RIB)');
+    expect(ribEn.svg).toContain('axis of revolution');
+    // There is no plan to set out, so nothing claims a new-moon direction.
+    expect(ribEn.svg).not.toContain('new moon 0°');
+  });
+
+  it('sizes the rib to the green profile, not to a diameter', () => {
+    const scale = greenScale(vessel);
+    const greenHeight = piece.spiral.length * scale;
+    const greenRadius = piece.outerRadiusMm * scale;
+    expect(rib.heightMm).toBeGreaterThan(greenHeight);
+    expect(rib.widthMm).toBeGreaterThan(greenRadius);
+    // A rib is a profile: taller than it is wide, and nothing like a diameter.
+    expect(rib.heightMm).toBeGreaterThan(rib.widthMm);
+    expect(rib.widthMm).toBeLessThan(2 * greenRadius);
+  });
+
+  it('says how to use it, and names every eruption on it', () => {
+    expect(ribEn.svg).toContain('Revolve about the left-hand axis');
+    expect(ribEn.svg).toContain('eroded inward');
+    for (const notch of piece.notches) {
+      expect(rib.svg).toContain(notch.eventId);
+    }
+  });
+
+  it('writes an STL that stands on the ground inside its own diameter', () => {
+    const mesh = buildWallMesh(piece, vessel);
+    const buffer = toBinaryStl([mesh], 'two clocks revolved test');
+    const view = new DataView(buffer);
+    const limit = piece.outerRadiusMm * 1.001;
+    for (let triangle = 0; triangle < mesh.triangleCount; triangle += 991) {
+      const offset = 84 + triangle * 50 + 12;
+      for (let vertex = 0; vertex < 3; vertex += 1) {
+        const x = view.getFloat32(offset + vertex * 12, true);
+        const y = view.getFloat32(offset + vertex * 12 + 4, true);
+        const z = view.getFloat32(offset + vertex * 12 + 8, true);
+        expect(Math.hypot(x, z)).toBeLessThanOrEqual(limit);
+        expect(y).toBeGreaterThanOrEqual(-0.001);
+        expect(y).toBeLessThanOrEqual(piece.totalHeightMm + 0.001);
+      }
+    }
+  });
+
+  it('writes a spec sheet that describes the revolved object, not a coil', () => {
+    const spec = buildSpec(piece, vessel, series, events, meta, 'en');
+    expect(spec.mapping.height).toContain('rise per synodic month');
+    expect(spec.mapping.radius).toContain('core radius');
+    expect(spec.mapping.angle).toContain('identical on every side');
+    expect(spec.mapping.notches).toContain('ring cut round the whole piece');
+    expect(spec.equations.join(' ')).toContain('revolved bore');
+    expect(spec.derived.watertight).toBe(true);
+    // And the coil's own wording is nowhere near it.
+    const coil = buildSpec(wall, params, series, events, meta, 'en');
+    expect(coil.mapping.radius).toContain('ring');
+    expect(coil.mapping.height).toBe('elev, Tanegashima observed hourly sea level');
+  });
+
+  it('sits the base disc under the foot of the profile, not under r₀', () => {
+    const withDisc: Params = { ...vessel, baseDisc: true };
+    const disc = buildBaseDisc(withDisc, 6, 64, 1, withDisc.r0 + piece.top[0]);
+    let widest = 0;
+    for (let v = 0; v < disc.positions.length; v += 3) {
+      widest = Math.max(widest, Math.hypot(disc.positions[v], disc.positions[v + 2]));
+    }
+    expect(widest).toBeCloseTo(withDisc.r0 + piece.top[0], 3);
   });
 });

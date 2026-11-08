@@ -10,10 +10,18 @@
  * Two sheets:
  *   plan    the spiral in plan: centerline, inner and outer wall lines, notch
  *           positions, the new-moon direction, day ticks every 7 days and a
- *           centre cross to set the piece out on the board
+ *           centre cross to set the piece out on the board.
+ *
+ *           On the revolved form there is no plan to set out — every turn
+ *           projects onto the same circle and the piece is the same on every
+ *           side — so this sheet becomes the RIB: the silhouette at 1:1, with
+ *           the axis of revolution down the left edge. Cut it out of ply or
+ *           sheet plastic and it is the tool that makes the pot.
  *   strips  the wall unrolled along its centerline, x = arc length and
  *           y = height, split into pieces no longer than stripMaxMm with
- *           numbered joints and 10 mm overlap tabs
+ *           numbered joints and 10 mm overlap tabs. On the revolved form the
+ *           same sheet reads as the profile cut into page lengths, since there
+ *           arc length is height up the axis and height is radius.
  */
 
 import type { Series } from '../data/series.js';
@@ -110,6 +118,9 @@ ${body}
 
 /** The plan sheet: set the spiral out on the board from this. */
 export function planSheet(wall: Wall, params: Params, series: Series, lang: Lang): TemplateSheet {
+  // The revolved form has no plan worth printing; it has a profile.
+  if (wall.clock.revolved) return profileSheet(wall, params, series, lang);
+
   const scale = greenScale(params);
   const outerRadius = (params.r1 + params.wallThickness / 2) * scale;
   const diameter = outerRadius * 2;
@@ -122,12 +133,20 @@ export function planSheet(wall: Wall, params: Params, series: Series, lang: Lang
   const px = (x: number) => cx + x * scale;
   const py = (y: number) => cy - y * scale;
 
-  const samples = wall.spiral.samples;
+  // Every turn of a constant-radius piece projects onto the same circle in
+  // plan, so only the first one is drawn: three overlaid copies would just
+  // thicken the line and treble the file.
+  const oneTurn = wall.clock.constantRadius
+    ? wall.spiral.samples.filter(
+        (sample) => sample.theta - wall.clock.thetaStart <= 2 * Math.PI + 1e-9,
+      )
+    : wall.spiral.samples;
+  const samples = oneTurn.length > 1 ? oneTurn : wall.spiral.samples;
   const half = (params.wallThickness / 2) * scale;
 
-  // A ring's outline has to be closed with Z, or the plotter leaves a gap at
-  // the seam where the last sample meets the first.
-  const close = wall.spiral.closed ? 'Z' : '';
+  // A full circle has to be closed with Z, or the plotter leaves a gap at the
+  // seam where the last sample meets the first.
+  const close = wall.clock.constantRadius ? 'Z' : '';
   const polyline = (points: Array<[number, number]>, stroke: string, strokeWidth: number, dash = '') =>
     `<path d="${points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${f(x)} ${f(y)}`).join('')}${close}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
 
@@ -216,6 +235,113 @@ ${titleBlock(MARGIN_MM, diameter + MARGIN_MM * 2 + 8, lang === 'es' ? 'PLANTA 1:
       : lang === 'es'
         ? `Longitud de la línea central ${(wall.spiral.length * scale).toFixed(0)} mm · ${wall.spiral.turns.toFixed(2)} vueltas`
         : `Centerline length ${(wall.spiral.length * scale).toFixed(0)} mm · ${wall.spiral.turns.toFixed(2)} turns`,
+  ])}`;
+
+  return { id: 'plan', widthMm: width, heightMm: height, svg: svgRoot(width, height, body) };
+}
+
+
+/**
+ * The rib: the revolved silhouette at 1:1, axis down the left edge.
+ *
+ * Everything is drawn in green millimetres like every other sheet, so the rib
+ * cut from this makes a pot that comes out of the kiln at the size the 3D view
+ * shows. Height runs UP the page because that is how the piece stands and how
+ * the tool is held.
+ */
+function profileSheet(wall: Wall, params: Params, series: Series, lang: Lang): TemplateSheet {
+  const scale = greenScale(params);
+  const samples = wall.spiral.samples;
+  const bore = wall.bore;
+  const profileHeight = wall.spiral.length * scale;
+  const widest = (params.r0 + Math.max(...wall.undisturbed)) * scale;
+
+  const blockHeight = CALIBRATION_MM + 32;
+  const width = widest + MARGIN_MM * 2 + 26;
+  const height = profileHeight + MARGIN_MM * 2 + blockHeight;
+  const axisX = MARGIN_MM;
+  const baseY = MARGIN_MM + profileHeight;
+
+  const px = (radius: number) => axisX + radius * scale;
+  const py = (z: number) => baseY - z * scale;
+
+  // One point per ~2 mm of green profile is more than a cutter needs.
+  const stride = Math.max(1, Math.round(2 / Math.max(params.arcStepMm * scale, 0.05)));
+  const outer: string[] = [];
+  const inner: string[] = [];
+  for (let i = 0; i < samples.length; i += stride) {
+    const z = samples[i].z;
+    outer.push(`${outer.length === 0 ? 'M' : 'L'}${f(px(params.r0 + wall.top[i]))} ${f(py(z))}`);
+    if (bore) inner.push(`${inner.length === 0 ? 'M' : 'L'}${f(px(bore[i]))} ${f(py(z))}`);
+  }
+  const last = samples.length - 1;
+  outer.push(`L${f(px(params.r0 + wall.top[last]))} ${f(py(samples[last].z))}`);
+  if (bore) inner.push(`L${f(px(bore[last]))} ${f(py(samples[last].z))}`);
+
+  // Day ticks on the axis side, with dates. A week-long window wants days; a
+  // long one would drown in them, so the step follows the window.
+  const start = Date.parse(series.window.startUtc);
+  const { i0, i1 } = wall.clock.window;
+  const tickStep = i1 - i0 > 14 * 24 ? 24 * 7 : 24;
+  const ticks: string[] = [];
+  for (let hour = i0; hour <= i1; hour += tickStep) {
+    const z = wall.spiral.arcLengthAtHour(hour);
+    const y = py(z);
+    ticks.push(
+      `<line x1="${f(axisX - 4)}" y1="${f(y)}" x2="${f(axisX + 4)}" y2="${f(y)}" stroke="${FAINT}" stroke-width="0.3"/>
+    <text x="${f(axisX + 6)}" y="${f(y - 1.2)}" font-family="monospace" font-size="2.8" fill="${FAINT}">${escapeXml(shortDate(new Date(start + hour * HOUR_MS), lang))}</text>`,
+    );
+  }
+
+  // Notches in red: on this form a cut is a ring round the piece, so it reads
+  // as a step in the profile rather than a slot in an edge.
+  const notchMarks = wall.notches
+    .map((notch) => {
+      const steps = Math.max(2, Math.ceil((notch.sEnd - notch.sStart) / 0.25));
+      const points: string[] = [
+        `M${f(px(params.r0 + interpolateCrest(wall, notch.sStart)))} ${f(py(notch.sStart))}`,
+      ];
+      for (let k = 0; k <= steps; k += 1) {
+        const s = notch.sStart + ((notch.sEnd - notch.sStart) * k) / steps;
+        points.push(`L${f(px(params.r0 + interpolateFloor(wall, s)))} ${f(py(s))}`);
+      }
+      points.push(`L${f(px(params.r0 + interpolateCrest(wall, notch.sEnd)))} ${f(py(notch.sEnd))}`);
+      const middle = (notch.sStart + notch.sEnd) / 2;
+      const label = `${notch.eventId}${notch.plumeUnknown ? ' ?' : ''}`;
+      return `<path d="${points.join('')}" fill="none" stroke="${RED}" stroke-width="0.4"/>
+    <text x="${f(px(params.r0 + interpolateCrest(wall, middle)) + 3)}" y="${f(py(middle))}" font-family="monospace" font-size="3" fill="${RED}">${escapeXml(label)}</text>`;
+    })
+    .join('\n    ');
+
+  const axisLabel = lang === 'es' ? 'eje de revolución' : 'axis of revolution';
+  const coreLabel = lang === 'es' ? `r₀ ${(params.r0 * scale).toFixed(1)} mm` : `r₀ ${(params.r0 * scale).toFixed(1)} mm`;
+
+  const body = `
+  <g>
+    <line x1="${f(axisX)}" y1="${f(MARGIN_MM - 6)}" x2="${f(axisX)}" y2="${f(baseY + 6)}" stroke="${INK}" stroke-width="0.4" stroke-dasharray="10 2 2 2"/>
+    <text x="${f(axisX + 2)}" y="${f(MARGIN_MM - 8)}" font-family="monospace" font-size="3.2" fill="${INK}">${escapeXml(axisLabel)}</text>
+    <line x1="${f(px(params.r0))}" y1="${f(MARGIN_MM)}" x2="${f(px(params.r0))}" y2="${f(baseY)}" stroke="${FAINT}" stroke-width="0.25" stroke-dasharray="3 2"/>
+    <text x="${f(px(params.r0) + 1.5)}" y="${f(baseY + 8)}" font-family="monospace" font-size="2.8" fill="${FAINT}">${escapeXml(coreLabel)}</text>
+    ${ticks.join('\n    ')}
+    <path d="${outer.join('')}" fill="none" stroke="${INK}" stroke-width="0.5"/>
+    ${bore ? `<path d="${inner.join('')}" fill="none" stroke="${FAINT}" stroke-width="0.35" stroke-dasharray="4 2"/>` : ''}
+    <line x1="${f(px(params.r0 + wall.top[0]))}" y1="${f(baseY)}" x2="${f(px(bore ? bore[0] : params.r0))}" y2="${f(baseY)}" stroke="${INK}" stroke-width="0.5"/>
+    <line x1="${f(px(params.r0 + wall.top[last]))}" y1="${f(py(samples[last].z))}" x2="${f(px(bore ? bore[last] : params.r0))}" y2="${f(py(samples[last].z))}" stroke="${INK}" stroke-width="0.5"/>
+    ${notchMarks}
+  </g>
+${titleBlock(MARGIN_MM, profileHeight + MARGIN_MM * 2 + 8, lang === 'es' ? 'PERFIL 1:1 (TERRAJA)' : 'PROFILE 1:1 (RIB)', params, lang, [
+    lang === 'es'
+      ? `Altura en crudo ${profileHeight.toFixed(0)} mm · diámetro máximo ${(2 * widest).toFixed(0)} mm · mínimo ${(2 * (params.r0 + Math.min(...wall.undisturbed)) * scale).toFixed(0)} mm`
+      : `Green height ${profileHeight.toFixed(0)} mm · largest diameter ${(2 * widest).toFixed(0)} mm · smallest ${(2 * (params.r0 + Math.min(...wall.undisturbed)) * scale).toFixed(0)} mm`,
+    lang === 'es'
+      ? `Línea continua: cara exterior. Discontinua: taladro, con el muro de ${(params.wallThickness * scale).toFixed(1)} mm erosionado hacia dentro`
+      : `Solid line: outer face. Dashed: the bore, the ${(params.wallThickness * scale).toFixed(1)} mm wall eroded inward`,
+    lang === 'es'
+      ? `${wall.spiral.turns.toFixed(2)} vueltas (lunaciones) · paso ${(params.pitchMm * scale).toFixed(0)} mm por vuelta · ${(wall.profile ? wall.profile.mmPerHour * scale : 0).toFixed(2)} mm por hora`
+      : `${wall.spiral.turns.toFixed(2)} turns (lunations) · ${(params.pitchMm * scale).toFixed(0)} mm rise per turn · ${(wall.profile ? wall.profile.mmPerHour * scale : 0).toFixed(2)} mm per hour`,
+    lang === 'es'
+      ? 'Gire alrededor del eje de la izquierda: la pieza es igual por todos lados'
+      : 'Revolve about the left-hand axis: the piece is the same on every side',
   ])}`;
 
   return { id: 'plan', widthMm: width, heightMm: height, svg: svgRoot(width, height, body) };
@@ -360,14 +486,25 @@ ${titleBlock(
     lang === 'es'
       ? `${ranges.length} tiras · longitud total ${(wall.spiral.length * scale).toFixed(0)} mm en crudo`
       : `${ranges.length} strips · total length ${(wall.spiral.length * scale).toFixed(0)} mm green`,
-    lang === 'es'
-      ? `x = longitud de arco, y = altura · solape ${OVERLAP_MM} mm`
-      : `x = arc length, y = height · ${OVERLAP_MM} mm overlap`,
+    wall.clock.revolved
+      ? lang === 'es'
+        ? `x = altura por el eje, y = radio desde r₀ · solape ${OVERLAP_MM} mm`
+        : `x = height up the axis, y = radius out from r₀ · ${OVERLAP_MM} mm overlap`
+      : lang === 'es'
+        ? `x = longitud de arco, y = altura · solape ${OVERLAP_MM} mm`
+        : `x = arc length, y = height · ${OVERLAP_MM} mm overlap`,
     ...(wall.spiral.closed
       ? [
           lang === 'es'
             ? `Anillo cerrado: la tira ${ranges.length} vuelve a unirse con la tira 1`
             : `Closed ring: strip ${ranges.length} joins back to strip 1`,
+        ]
+      : []),
+    ...(wall.clock.revolved
+      ? [
+          lang === 'es'
+            ? 'Forma de revolución: estas tiras son el mismo perfil que la hoja de la terraja, partido en largos de página'
+            : 'Revolved form: these strips are the rib sheet’s own profile, cut into page lengths',
         ]
       : []),
   ],

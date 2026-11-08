@@ -1,8 +1,9 @@
 # Two clocks · Dos relojes
 
-Tanegashima's measured sea level during Pichincha's 1999 eruptions, as one spiral
-ceramic wall — explorable in 3D, exportable as renders, meshes, 1:1 cutting
-templates and a spec sheet.
+Tanegashima's measured sea level during Pichincha's 1999 eruptions, as one
+ceramic object — a thrown vessel whose silhouette is the tide, or a spiral wall,
+or a crown for a vase — explorable in 3D, exportable as renders, meshes, 1:1
+cutting templates and a spec sheet.
 
 Two clocks run through the piece. The Moon's, which drives the island's tide, and
 the volcano's, which kept its own time. **If the eruptions bunch near one angle,
@@ -15,11 +16,17 @@ the form shows it. It does not explain it, and no causal relation is claimed.**
 | Dimension | Quantity | Detail |
 | --- | --- | --- |
 | **Angle θ** | the Moon | each hour sits at its lunar phase angle; 0° = new moon, 180° = full. One turn = one synodic month (~29.53 d). |
-| **Radius r** | elapsed time | grows linearly with θ, so turns are evenly spaced — or stays constant in circle mode, where the wall closes into a cylinder. |
+| **Radius r** | elapsed time | grows linearly with θ, so turns are evenly spaced — or stays constant in circle mode, where the wall closes into a ring. |
 | **Wall height h** | observed sea level | Tanegashima station TJ, hourly, JMA original record. |
 | **Red notches** | eruptions | cut into the top edge at the exact UTC instant, deeper for a taller plume. |
 
 Nothing on the piece is red except the eruptions.
+
+**The default mode swaps two of those rows.** Cylinder mode is a form of
+revolution rather than a coil: the Moon runs up the AXIS, the tide becomes the
+RADIUS, and the eruptions are rings cut all the way round. The quantities are
+the same; which dimension carries them is not. See
+[Cylinder mode](#cylinder-mode--the-form-of-revolution).
 
 ---
 
@@ -266,7 +273,8 @@ All model dimensions are **fired** sizes in mm. Shrinkage is applied only at exp
 
 | Mode | θ(t) | Turns | Radius | What lines up |
 | --- | --- | --- | --- | --- |
-| **Circle** (default) | lunar phase, scaled to one turn | 1 | constant, r₀ | the seam; a one-lunation window puts new moon on it |
+| **Cylinder** (default) | unwrapped moon phase, driving HEIGHT | one per synodic month | r₀ + the tide — θ is not an angle here | every lunation the same slice of the axis |
+| Circle | lunar phase, scaled to one turn | 1 | constant, r₀ | the seam; a one-lunation window puts new moon on it |
 | Synodic | unwrapped moon phase | one per synodic month | r₀ → r₁ | new moons at 0°, full moons at 180° |
 | Spring–neap | 2 × unwrapped phase | two per month | r₀ → r₁ | new *and* full moon both at 0° |
 | Linear | uniform in time | user-set | r₀ → r₁ | nothing — the control version |
@@ -278,30 +286,30 @@ interface never lies about where the Moon was.
 
 ### Circle mode — the crown of a vase
 
-The site opens on circle mode: one turn, constant radius, and the two ends of the
-wall joined, so the piece is a closed cylinder rather than an outward spiral. r₁
-has nowhere to grow to, so it is ignored and the panel disables it; r₀ alone sets
-the size.
+Circle mode is one turn, constant radius, and the two ends of the wall joined,
+so the piece is a closed ring rather than an outward spiral. r₁ has nowhere to
+grow to, so it is ignored and the panel disables it; r₀ alone sets the size. It
+was the site's default until the revolved form took that place, and it is still
+the mode for a **crown to sit on the rim of a thrown vase**.
 
-The defaults make a **crown to sit on the rim of a thrown vase**:
+At the shipped numbers:
 
 | | |
 | --- | --- |
-| Window | **1–12 October 1999** — the 5 Oct and 7 Oct subplinian eruptions |
-| Ring radius r₀ | **100 mm** → 206 mm fired outer diameter, 234 mm green |
-| Around | 628 mm, 23 tidal cycles |
-| Crown | 15 mm collar rising to 56 mm at the spring tide |
-| Notches | e2 16.0 mm, e3 15.2 mm, at 0.8 mm per km of plume |
-| Clay | ~136 cm³, about 300 g fired |
+| Window | **4–10 October 1999** — the 5 Oct and 7 Oct subplinian eruptions |
+| Ring radius r₀ | **90 mm** → 186 mm fired outer diameter, 211 mm green |
+| Around | 565 mm, 13 tidal cycles |
+| Crown | 16 mm collar rising to 29 mm at the spring tide |
+| Tide | 42 mm per cycle — wide teeth, easily carved |
 
-Those numbers are not a style choice, they are the only corner of the parameter
-space that works. One tidal cycle occupies `circumference × 12.42 / window
-hours` of arc; the circumference is fixed by the vase, so the window is what
-decides whether the tide can be cut at all. Twelve days on a 100 mm ring gives
-teeth about **13 mm wide at green size with a 3.2 : 1 height-to-width ratio** —
-carvable by hand. The brief's full 97 days on the same ring gives 2 mm teeth at
-18 : 1, which no method can make. The whole of 1–12 October is observed data:
-not one hour of it is reconstructed.
+The window is what decides whether the tide can be cut at all. One tidal cycle
+occupies `circumference × 12.42 / window hours` of arc, and the circumference is
+fixed by the vase, so a long window packs the tide into teeth too fine to cut.
+Seven days on a 90 mm ring gives 42 mm teeth; twelve days gives about 13 mm, at
+a 3.2 : 1 height-to-width ratio, still carvable by hand; the brief's full 97
+days on the same ring gives 2 mm teeth at 18 : 1, which no method can make.
+A taller crown wants a larger `k` than the revolved form's 0.08 — the shipped
+numbers are chosen for the default mode, and this is the one place they show it.
 
 `Registro completo` restores the brief's 97 days for looking at all five
 eruptions at once; the tide-wavelength check will say, correctly, that it cannot
@@ -337,9 +345,140 @@ neighbour to be spaced from.
 **A ring and a spiral want very different radii.** The ring has one turn to fit
 the whole record into, so it has to be wide; the spiral has to stay small enough
 that three turns of wall are a buildable length. r₀ serves both, so it is set for
-the default mode (160 mm, a 326 mm fired cylinder). Switching to a spiral mode
-raises checks, each with a one-click fix — including a *lower r₀* lever for when
-the kiln will not allow a wider r₁.
+the default mode. Switching to a spiral mode raises checks, each with a one-click
+fix — including a *lower r₀* lever for when the kiln will not allow a wider r₁.
+
+### Cylinder mode — the form of revolution
+
+This is what the site opens on, and it is the one mode that is not a coil at
+all. Time runs **up the axis** and the tide becomes the **radius**, so the piece
+is a surface of revolution: a thrown vessel whose silhouette is the record.
+Every tide crest is a full circle of its own diameter, identical on every side
+of the piece — which is exactly what a profile pulled against a turning wheel
+makes, and the reason the mode exists.
+
+| Dimension | Carries |
+| --- | --- |
+| Height z | the Moon — `pitchMm` of rise per synodic month |
+| Radius R(z) | the tide — `r₀ + h_base + k × (level − min)` |
+| Ring grooves | the eruptions, cut all the way round at their own height |
+
+Because the angle is the real unwrapped lunar phase, one lunation is always the
+same slice of the axis: the Moon's own uneven pace shows as rings spaced a few
+per cent further apart near perigee. The piece is `turns × pitchMm` tall, and
+nothing stands on top of it.
+
+#### The defaults
+
+| | |
+| --- | --- |
+| Window | **4–10 October 1999** — both subplinian eruptions, two days of margin |
+| Fired | **324 mm tall**, 184 mm across at the low waters, 237 mm at the high ones |
+| Green | 270 × 368 mm — inside a 400 mm kiln in both directions |
+| Tide | 24 mm of height and 26 mm of relief per cycle, about thirteen swells |
+| Profile slope | 1.65 : 1, so at most 11 mm of clay on a 6 mm wall |
+| Clay | ~1 980 cm³ |
+
+**The window binds the opposite way round from the ring.** On a ring the tide has
+to fit *around* a fixed circumference, so a long window makes it too fine. Here
+the tide has to fit *up* a height the kiln limits, and what gives out is the
+profile's slope. Seven days is about as much as a 400 mm kiln will carry at a
+relief worth looking at; the twelve-day crown window would need `k` down near
+0.05, which is a 5 mm ripple on a 300 mm pot.
+
+#### The path is the axis
+
+`buildSpiral` hands off to `buildProfile` when the clock is revolved, and there
+is no spline and no plan walk there, because the path is a straight line. Arc
+length up it is plain height in mm, which is what makes a notch width and a
+smoothing wavelength mean the same thing here as on a coil. Every station
+reports a radial normal at `thetaRefDeg`, so the cursor, the notch labels and
+the rib template all have one meridian to live on; nothing about the solid
+depends on which one.
+
+#### The wall is eroded, not offset
+
+The inner surface is **not** the outer one offset inward by the wall thickness.
+That model fails outright: offsetting `R(z)` inward by `t` folds through itself
+wherever the silhouette turns tighter than `t`, which a tide on a vessel does
+constantly. It is not what a potter's hand does either — a hand leaves the clay
+*thicker* at a tight crest. That is precisely a morphological erosion:
+
+```
+R_in(z) = min over |dz| ≤ t of [ R(z + dz) − √(t² − dz²) ]
+```
+
+the set of points a disc of radius `t` still fits inside. The `dz = 0` term is
+`R(z) − t`, so the wall is never thinner than nominal; and because the result is
+an erosion it can never self-intersect, whatever the tide does. Past the two
+rims there is no material to constrain anything, so the window is clipped there
+and a cut rim keeps its nominal thickness — which is what a cut rim is.
+
+#### Slope, not curvature
+
+The check that replaces radial turn spacing is the **profile slope**, `max |dR/dz|`
+on the hourly curve. It is what a rib has to follow on the wheel, and it also
+bounds the erosion above:
+
+```
+clay(z) ≤ t · √(1 + maxSlope²)
+```
+
+so 2 : 1 is a steep flute that still comes out at 2.2 walls of clay — ordinary
+thrown thickness — and past 3 : 1 the clay is over three walls thick in places,
+which is a drying crack waiting to happen. Both levers move the slope *exactly*:
+it goes as `k` and as `1 / pitchMm`, so the advice needs no approximation.
+
+The slope is measured on the **hourly** relief, not on the mesh's own 0.5 mm
+stations. Reading it off the stations made it a measure of the sampling rather
+than of the form: squash the piece until one station spans several hours and the
+interpolation flattens the tide away, so a badly squashed profile reported a
+*gentle* slope and the fix solved from it landed nowhere near the limit. The
+record is hourly; the form it asks for is the same whatever the mesh does.
+
+#### The kiln limits the height, and the window is the lever
+
+`wallLength` does not apply — there is no strip of wall to build — so it is
+replaced by **piece height**: `turns × pitch ÷ (1 − shrinkage)` against the same
+kiln measure as the diameter. Its fix shortens the window rather than dropping
+the pitch, because the pitch is what fixes the mm per hour: fewer hours is a
+shorter piece **with the tide unchanged**. A lower pitch would squash it.
+
+Two details make that one click actually land:
+
+- The piece rises with the Moon's phase rather than with the clock, so the same
+  number of hours is up to about 12% taller near perigee. The suggestion keeps
+  15% in hand.
+- The panel edits dates as whole days and stores the end at 23:00, so a
+  suggestion landing mid-day would be rounded *forward* by up to 23 hours the
+  moment the panel refreshed — enough to push the piece straight back out of the
+  kiln. Suggested ends are floored to the last whole day that fits.
+
+#### The mesh
+
+A revolved solid costs stations × segments × 2 vertices. 128 segments give 2.8°
+facets — 0.06 mm of sag at a 200 mm radius, a hundredth of the smallest feature
+any clay body holds. But the stations follow the piece's *height*, and the whole
+97-day record at 0.5 mm steps is nine thousand of them: 2.4 million vertices,
+which WebGL refuses to draw outright. So the segment count is budgeted to
+600 000 vertices and falls back toward a floor of 16 for pieces that have
+already failed their kiln check.
+
+The solid is a sleeve — two surfaces joined by annular rims — so it is
+topologically a torus, **Euler characteristic 0**, the same as the closed ring.
+Faces are wound outward by hand here rather than left to the global volume flip,
+because that flip reverses every triangle together and so cannot repair a
+surface whose faces disagree with each other.
+
+#### What the templates print
+
+There is no plan to set out: every turn projects onto the same circle and the
+piece is the same on every side. So `planSheet` prints the **rib** instead — the
+silhouette at 1:1 green size with the axis of revolution down the left edge, the
+eroded bore dashed, the eruptions in red and the dates up the axis. Cut it out
+of ply or sheet plastic and it is the tool that makes the pot. The strip sheet
+is the same profile cut into page lengths, for a profile too long to fit on one
+piece.
 
 **The turns are only yours in linear mode.** In synodic and spring–neap the window
 sets them, so the `turns` slider is disabled there — it would otherwise look live
@@ -358,23 +497,30 @@ turns ≥ the turns that make the spiral long enough that one tidal
         cycle is at least minFeature wide
 ```
 
-At the default window and radii (r₀ = 30, r₁ = 140, 6 mm wall, 12 mm clearance,
-5 mm minimum feature) that bracket is **1.74 to 6.11 turns**:
+The bracket applies to the three coiled spiral modes. **The revolved form is not
+in it at all**: its turns are slices of the axis, so what brackets it is the
+profile's slope against the kiln's height, which the mode's own section covers.
+
+Measured, at a 6 mm wall, 12 mm clearance and a 5 mm minimum feature. The
+spiral rows use the brief's own radii (r₀ = 30, r₁ = 140) and gain (k = 0.25),
+where the bracket is **1.74 to 6.11 turns**; the two constant-radius rows use
+the shipped numbers.
 
 | Configuration | Turns | Length | Turn spacing | Tide wavelength | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| **Circle, defaults (12 days)** | 1 | 0.63 m | n/a | 27.2 mm | the shipped default; carvable |
+| **Cylinder, defaults (7 days)** | 0.23 | 324 mm tall | n/a | 24.1 mm | the shipped default; all green |
+| Cylinder, 97 days | 3.29 | 4.61 m tall | n/a | 24.7 mm | **fails**: 5.2 m green, no kiln takes it |
+| **Circle, defaults (7 days)** | 1 | 0.57 m | n/a | 42.1 mm | a crown; wide teeth, easily carved |
 | Circle, 97 days at r₀ = 100 | 1 | 0.63 m | n/a | 3.4 mm | unmakeable — teeth 2 mm wide |
 | Synodic, 97 days, r₀ = 30, r₁ = 140 | 3.29 | 1.76 m | 33.4 mm | 9.4 mm | passes; long to build |
-| Spring–neap, default radii | 6.59 | 3.52 m | **16.7 mm** | 18.9 mm | **fails**: turns crowd |
-| Spring–neap, r₁ = 149 | 6.59 | 3.71 m | 18.1 mm | 19.9 mm | spacing fixed, 3.7 m of wall |
-| **Spring–neap, short window** | 1.36 | 0.64 m | 51.5 mm | 16.7 mm | the one worth building |
-| Linear, 2.23 turns | 2.23 | 1.20 m | 49.3 mm | 6.4 mm | 1.2 m, tide getting fine |
-| Linear, 6.11 turns | 6.11 | 3.27 m | 18.0 mm | 17.5 mm | at the spacing limit |
+| Spring–neap, 97 days | 6.59 | 3.52 m | **16.7 mm** | 18.9 mm | **fails**: turns crowd, 3.5 m of wall |
+| **Spring–neap, 7-day window** | 0.46 | 0.27 m | n/a | 20.4 mm | all green |
+| Linear, 2.23 turns, 97 days | 2.23 | 1.20 m | 49.3 mm | 6.4 mm | 1.2 m, tide getting fine |
+| Linear, 6.11 turns, 97 days | 6.11 | 3.27 m | 18.0 mm | 17.5 mm | at the spacing limit, 3.3 m of wall |
 
 So, in short: **spring–neap wants a shorter window, not bigger radii.** Doubling
-the turns doubles the wall, and 3.5 m of slab is not a sensible object; the short
-window preset brings it to 1.36 turns and 0.64 m, where every check passes.
+the turns doubles the wall, and 3.5 m of slab is not a sensible object; the
+seven-day window brings it to half a turn and 0.27 m, where every check passes.
 
 Linear mode shows the real trade-off plainly. Below about 1.74 turns the spiral is
 too short and a tidal cycle narrows past the minimum feature; above 6.11 the turns
@@ -451,13 +597,19 @@ Live in the panel, and carried into the spec sheet.
 
 | Check | Rule | At the defaults | Lever when it fails |
 | --- | --- | --- | --- |
-| Turn spacing | ≥ t_wall + clearance (6 + 12 mm) | *not shown — a ring has no neighbouring turn* | r₁, r₀, clearance, turns |
-| Green diameter | fired ÷ (1 − shrinkage) ≤ kiln limit | **234.1 mm** ≤ 400 ✓ | the outer radius, shrinkage, kiln limit |
-| Tide wavelength | one M2 cycle ≈ length × 12.42 / window hours, ≥ min feature | **27.2 mm** ≥ 5 ✓ | radius, turns, window, smoothing |
-| Wall height | between h_base and the maximum | **8.4 – 55.9 mm** ≤ 90 ✓ | k, h_base, maximum height |
-| Wall length | handwork budget | **0.63 m** ≤ 1.2 ✓ | window, radii, turns |
+| Turn spacing | ≥ t_wall + clearance (6 + 12 mm) | *not shown — the revolved form has no neighbouring turn* | r₁, r₀, clearance, turns |
+| Profile slope | max \|dR/dz\| ≤ 2 : 1 (revolved only) | **1.65 : 1** ✓ | pitch, k |
+| Green diameter | fired ÷ (1 − shrinkage) ≤ kiln limit | **269.8 mm** ≤ 400 ✓ | the outer radius, shrinkage, kiln limit |
+| Tide wavelength | one M2 cycle ≈ length × 12.42 / window hours, ≥ min feature | **24.1 mm** ≥ 5 ✓ | pitch (revolved), radius, turns, window, smoothing |
+| Tide relief | between h_base and the maximum | **2.4 – 28.7 mm** ≤ 90 ✓ | k, h_base, maximum height |
+| Piece height | green height ≤ kiln limit (revolved only) | **368.4 mm** ≤ 400 ✓ | the window |
+| Wall length | handwork budget | *not shown — nothing is built as a strip here* | window, radii, turns |
 | Notches | none clamped | 2 of 2 ✓ | depth per km, d₀, k, h_base |
 | Eruptions in the window | all of them get a notch | **2/5** — warn | the window dates — no button |
+
+The rows a mode cannot act on are left out rather than shown as a meaningless
+pass: `turnSpacing` and `wallLength` belong to the coiled forms, `profile` and
+`pieceHeight` to the revolved one.
 
 The default carries one amber row, and it is a choice rather than a fault: the
 twelve-day window leaves e1, e4 and e5 off the piece. The check says so in those
@@ -535,14 +687,15 @@ The last one is a real correction. The brief's ~57 mm came from the largest *dai
 range, 228 cm. The window's full minimum-to-maximum range is 271 cm, so the wall
 rises ~68 mm above h_base and stands 82.6 mm tall at the spring tide of 24 December.
 
-**One consequence worth seeing before you commit clay.** At the default `k = 0.25`,
+**One consequence worth seeing before you commit clay.** At the brief's `k = 0.25`
 the tide swings most of that 68 mm every 12.4 hours — which is 9.4 mm of arc. The
 object is therefore a very fine comb, not a gently undulating wall: about 190
 tooth-pairs over 1.76 m. That is a faithful rendering of the record and the
 fabrication checks pass, but it is a lot of work in clay. The `smoothing` parameter
-(low-pass along the arc) and a lower `k` are there to trade fidelity for buildability,
-and the short-window preset (26 Sep – 15 Oct, two-thirds of a turn around the two
-October eruptions, 0.33 m of wall) is there to trade duration for the same.
+(low-pass along the arc) and a lower `k` are there to trade fidelity for
+buildability, and the seven-day window preset is there to trade duration for the
+same. The shipped defaults take the second road: `k = 0.08` over seven days,
+which is why they look nothing like these numbers.
 
 ---
 
@@ -570,9 +723,10 @@ Paper clay or a grogged stoneware. The red belongs *in* the cut — underglaze o
 slip inlaid and wiped back — so the colour reads as a notch rather than a mark.
 
 One trap worth knowing: **smoothing does not widen the teeth.** It attenuates
-their height while leaving every zero crossing in place, so at 16 mm of
-smoothing the default still has 171 peaks, now 7 mm tall — a ripple, not a form.
-Only a shorter window or a larger ring widens the pitch.
+their height while leaving every zero crossing in place, so smoothing a comb
+leaves the same number of peaks, merely shorter — a ripple, not a form. Only a
+shorter window, a larger ring or (on the revolved form) a taller pitch gives
+each tide more room.
 
 ---
 
@@ -666,19 +820,25 @@ always be matched. Filenames are `two-clocks_<what>_<hash>.<ext>`.
    watertight.
 3. **1:1 templates (SVG, and tiled PDF)**, scaled up by 1/(1 − shrinkage):
    - *Plan sheet* — centerline, inner and outer wall lines, notch outlines in red
-     with their event ids, the new-moon direction, day ticks every 7 days, centre cross.
+     with their event ids, the new-moon direction, day ticks every 7 days, centre
+     cross. **On the revolved form this sheet is the rib instead**: the silhouette
+     at 1:1 with the axis of revolution down the left edge, the eroded bore dashed,
+     the eruptions in red and the dates up the axis — cut it out and it is the tool
+     that makes the pot.
    - *Wall strips* — the wall unrolled along its centerline (x = arc length,
      y = height), split into strips no longer than `stripMaxMm` **at green size**,
      with numbered joints, 10 mm overlap tabs, the date range on each strip, and the
-     notches outlined in red so a cut is never mistaken for a tide.
+     notches outlined in red so a cut is never mistaken for a tide. On the revolved
+     form the same sheet reads as the rib's own profile cut into page lengths,
+     since there arc length is height and height is radius.
    - Every sheet carries a **100 mm calibration square**, a "print at 100%" note and
      the config hash. SVG roots use real units — `width`/`height` in mm with a
      matching viewBox in mm — so files print at true size; the square is there to
      catch the viewers that ignore units.
    - The PDF lays each sheet over a grid of A4/A3/Letter pages with 10 mm margins,
      corner crop marks, edge-midpoint registration ticks, row/column labels and
-     "page n of N". At defaults that is 16 A4 pages: 4 for the plan (361 × 485 mm),
-     12 for the strips (381 × 919 mm).
+     "page n of N". At the defaults that is 7 A4 pages: 3 for the rib
+     (197 × 536 mm) and 4 for the strips (404 × 229 mm).
 4. **Spec sheet (JSON and one-page PDF)** — parameters, equations, data sources with
    URLs and SHA-256 hashes, the datum and whether it was verified, the gap list with
    the fit residual, the event table with precision flags and notch depths, the
@@ -693,7 +853,7 @@ always be matched. Filenames are `two-clocks_<what>_<hash>.<ext>`.
 npm test
 ```
 
-189 tests in six files.
+199 tests in six files.
 
 - `parseJma.test.ts` (20) — file shape, missing-value counts, every hand-read value
   from the brief, the daily-range extremes, extremum blocks, and the error paths:
@@ -707,7 +867,7 @@ npm test
 - `moon.test.ts` (16) — the phase convention, all seven PyEphem reference instants
   to ±5 min, unwrapping forwards and backwards, ~360° per synodic month over the real
   series, and the phase labels.
-- `geometry.test.ts` (60) — the built data's own invariants, the three clock modes,
+- `geometry.test.ts` (70) — the built data's own invariants, the three clock modes,
   arc-length resampling and forced sample positions, notch depths and widths, vertical
   notch sides, "cuts only inside notches and nowhere else", **watertightness and Euler
   characteristic 2**, green-size scaling, the fabrication checks passing at defaults
@@ -715,7 +875,19 @@ npm test
   Circle mode gets its own block: one turn whatever the window, a constant radius
   that ignores r₁ entirely, 2πr₀ around, no duplicated sample at the seam, arc
   length that wraps rather than clamps, outward normals, a watertight torus of
-  Euler characteristic 0, and the turn-spacing check correctly absent.
+  Euler characteristic 0, and the turn-spacing check correctly absent. The
+  revolved form gets another: arc length equal to height with no direction in
+  plan at all, the tide coming out of the circumference rather than the top, one
+  radius per station all the way round (the surface-of-revolution property
+  itself), a bore that is never thinner than nominal and never folds — checked
+  at four settings including ones that would turn a plain offset inside out —
+  with the clay inside the `t·√(1 + slope²)` bound, a watertight sleeve of Euler
+  characteristic 0, a diameter taken from the crest rather than r₀, the slope
+  scaling exactly as `1/pitch` and as `k`, the right checks present and the coil
+  ones absent, a squashed profile failing and its fix clearing it, the piece-height
+  fix shortening the window while leaving the tide's shape alone, eruptions cut as
+  rings reaching every quadrant, and `z`, `profile` and `bore` staying empty in
+  all four other modes.
 - `export.test.ts` (35) — STL byte layout, triangle count, unit normals and bounds;
   strips summing back to the centerline within 0.5 mm with no gaps and a 10 mm tab on
   all but the last; SVG mm units matching the viewBox 1:1, the 100 mm square, the
@@ -724,7 +896,7 @@ npm test
   to within 1%; the turn bracket; that advice is present exactly when a check is not
   passing and always names a number; and, for each lever in turn, that **the number
   the warning printed makes that check pass when fed back in**. The one-click fixes
-  are checked against thirteen broken configurations, circle and spiral, for all
+  are checked against thirteen broken configurations, revolved, circle and spiral, for all
   five rules above —
   clears its own check, breaks no green one, cascades at most one warning, lands on
   a value the sliders can hold (including a round trip through their rounding), and
@@ -757,7 +929,7 @@ src/geom/              params.ts (incl. PARAM_RANGES)  clock.ts  spiral.ts
 src/export/            png.ts  mesh.ts  templates.ts  pdf.ts  spec.ts  download.ts
 src/ui/                scene.ts  timeline2d.ts  scrubber.ts  panel.ts  tooltip.ts
 src/i18n/              strings.ts (interface)  help.ts (tooltips)
-tests/                 six suites, 189 tests
+tests/                 six suites, 199 tests
 ```
 
 Stack: Vite + TypeScript, three.js (OrbitControls, GLTFExporter), `postprocessing`
@@ -783,10 +955,19 @@ jsPDF + svg2pdf.js, `@fontsource` (Inter, JetBrains Mono), Vitest, `tsx`.
 - **The datum is verified, the station position is approximate.** The latitude and
   longitude in `series.json` are Tanegashima's tide station to about a hundred metres;
   nothing in the geometry depends on them.
-- **A ring and a spiral need different radii.** r₀ is both the ring's radius and
-  the spiral's inner radius, and the two want values an order apart. There is no
-  single default that suits both, so the default suits circle mode and switching
-  to a spiral raises checks with fixes rather than silently resizing the piece.
+- **Each form wants different numbers.** r₀ is the ring's radius, the spiral's
+  inner radius and the revolved form's core all at once, and k is a height on
+  three of the modes and a radius on the fourth. No single set suits them all,
+  so the shipped numbers suit the default mode — and they are chosen to leave
+  every other mode green as well, so changing mode is a change of form rather
+  than a wall of red. Where a mode does want something different, it raises a
+  check with a fix rather than silently resizing the piece.
+- **The revolved form cannot carry a long window.** Its height is what the kiln
+  caps, and the tide has to fit up that height: past about a week the profile's
+  slope goes past 2 : 1 and the clay at the crests runs to three times the wall.
+  The 97-day record comes out 4.6 m tall. The ring has the mirror-image problem
+  — it cannot be both long in time and coarse in the clay — for the opposite
+  reason.
 - **A ring cannot be both long in time and coarse in the clay.** The kiln caps
   the radius at r₀ = 173 mm, which is 1 087 mm around; at 97 days that is a
   5.8 mm tidal cycle at best. A circle that clears the minimum-feature check

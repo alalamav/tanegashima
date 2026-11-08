@@ -15,6 +15,10 @@ export const STRINGS = {
     es: 'El ángulo es la Luna, el radio es el tiempo transcurrido, la altura del muro es la marea observada y las muescas rojas son las erupciones. Si las erupciones se agrupan cerca de un ángulo, la forma lo muestra. No lo explica.',
     en: 'Angle is the Moon, radius is elapsed time, wall height is the observed tide, and the red notches are the eruptions. If the eruptions bunch near one angle, the form shows it. It does not explain it.',
   },
+  framingRevolved: {
+    es: 'La altura es la Luna, el radio es la marea observada y las muescas rojas son las erupciones, cada una un anillo que da la vuelta entera. La pieza es igual por todos lados: es un torneado, y su silueta es el registro. Lo muestra. No lo explica.',
+    en: 'Height is the Moon, radius is the observed tide, and the red notches are the eruptions — each one a ring all the way round. The piece is the same on every side: it is a thrown form, and its silhouette is the record. It shows it. It does not explain it.',
+  },
 
   // readout
   utc: { es: 'UTC', en: 'UTC' },
@@ -31,24 +35,28 @@ export const STRINGS = {
   observedHour: { es: 'hora observada', en: 'observed hour' },
   wallHeight: { es: 'Altura del muro', en: 'Wall height' },
   arcPosition: { es: 'Posición en el muro', en: 'Position along the wall' },
+  vesselDiameter: { es: 'Diámetro aquí', en: 'Diameter here' },
+  axisPosition: { es: 'Altura en el eje', en: 'Height up the axis' },
 
   // panel sections
   clock: { es: 'Reloj', en: 'Clock' },
   clockMode: { es: 'Modo', en: 'Mode' },
-  circle: { es: 'Círculo (cilindro cerrado)', en: 'Circle (closed cylinder)' },
+  circle: { es: 'Círculo (anillo cerrado)', en: 'Circle (closed ring)' },
+  cylinder: { es: 'Cilindro (forma de revolución)', en: 'Cylinder (revolved form)' },
   synodic: { es: 'Sinódico (fase lunar)', en: 'Synodic (moon phase)' },
   springNeap: { es: 'Sicigias (2 × fase)', en: 'Spring–neap (2 × phase)' },
   linear: { es: 'Lineal (control)', en: 'Linear (control)' },
   linearTurns: { es: 'Vueltas (lineal)', en: 'Turns (linear)' },
   windowStart: { es: 'Inicio de la ventana', en: 'Window start' },
   windowEnd: { es: 'Fin de la ventana', en: 'Window end' },
-  shortWindow: { es: 'Ventana del jarrón (1 – 12 oct)', en: 'Vase window (1 – 12 Oct)' },
+  shortWindow: { es: 'Ventana de la pieza (4 – 10 oct)', en: 'Vessel window (4 – 10 Oct)' },
   fullWindow: { es: 'Registro completo (26 sep – 31 dic)', en: 'Whole record (26 Sep – 31 Dec)' },
 
-  spiral: { es: 'Espiral', en: 'Spiral' },
+  spiral: { es: 'Forma', en: 'Form' },
   r0: { es: 'Radio inicial r₀', en: 'Inner radius r₀' },
   r1: { es: 'Radio final r₁', en: 'Outer radius r₁' },
   thetaRef: { es: 'Rotación θ_ref', en: 'Rotation θ_ref' },
+  pitch: { es: 'Subida por vuelta', en: 'Rise per turn' },
   arcStep: { es: 'Paso de remuestreo', en: 'Resampling step' },
 
   wall: { es: 'Muro', en: 'Wall' },
@@ -122,7 +130,7 @@ export const STRINGS = {
     en: 'Observed sea level, Tanegashima',
   },
   dragHint: {
-    es: 'Pase el ratón para recorrer · clic en el inicio y el fin para fijar la ventana · arrastre la ventana para moverla',
+    es: 'Pase el mouse para recorrer · clic en el inicio y el fin para fijar la ventana · arrastre la ventana para moverla',
     en: 'Hover to travel · click the start and the end to set the window · drag the window to move it',
   },
   pickEnd: {

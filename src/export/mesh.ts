@@ -77,7 +77,12 @@ export function toBinaryStl(meshes: MeshData[], header: string): ArrayBuffer {
 function solids(wall: Wall, params: Params, green: boolean): MeshData[] {
   const scale = green ? greenScale(params) : 1;
   const out = [buildWallMesh(wall, params, scale)];
-  if (params.baseDisc) out.push(buildBaseDisc(params, 6, 256, scale));
+  if (params.baseDisc) {
+    // The revolved form's foot is wherever the tide left it, not r₀, so the
+    // disc is sized to the bottom of the actual profile.
+    const footRadius = wall.clock.revolved ? params.r0 + wall.top[0] : undefined;
+    out.push(buildBaseDisc(params, 6, 256, scale, footRadius));
+  }
   return out;
 }
 

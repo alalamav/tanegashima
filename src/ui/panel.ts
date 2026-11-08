@@ -8,8 +8,9 @@ import { Pane } from 'tweakpane';
 import type { BladeApi, FolderApi } from '@tweakpane/core';
 
 import {
+  revolved,
   FULL_WINDOW_PRESET,
-  isSpiral,
+  growsOutward,
   PARAM_RANGES,
   SHORT_WINDOW_PRESET,
   type Params,
@@ -64,6 +65,7 @@ export function createPanel(
    *  re-disabled whenever the mode changes. */
   let turnsBinding: BladeApi | null = null;
   let outerRadiusBinding: BladeApi | null = null;
+  let pitchBinding: BladeApi | null = null;
 
   // Dates are edited as plain YYYY-MM-DD text; the hours come from the series.
   const dates = {
@@ -104,11 +106,13 @@ export function createPanel(
     /**
      * Controls that the current mode does not read are disabled rather than
      * left to look live and respond to nothing: the turns outside linear mode,
-     * and r₁ in circle mode, where the ring has nowhere to grow to.
+     * r₁ wherever the radius is constant, and the pitch outside the revolved
+     * form, which is the only one with a height to set.
      */
     const syncModeEnabled = (): void => {
       if (turnsBinding) turnsBinding.disabled = params.clockMode !== 'linear';
-      if (outerRadiusBinding) outerRadiusBinding.disabled = !isSpiral(params.clockMode);
+      if (outerRadiusBinding) outerRadiusBinding.disabled = !growsOutward(params.clockMode);
+      if (pitchBinding) pitchBinding.disabled = !revolved(params.clockMode);
     };
 
     const changed = () => {
@@ -124,6 +128,7 @@ export function createPanel(
           label: t('clockMode', lang),
           options: {
             [t('circle', lang)]: 'circle',
+            [t('cylinder', lang)]: 'cylinder',
             [t('synodic', lang)]: 'synodic',
             [t('springNeap', lang)]: 'springNeap',
             [t('linear', lang)]: 'linear',
@@ -165,6 +170,10 @@ export function createPanel(
       'r1',
     );
     syncModeEnabled();
+    pitchBinding = withHelp(
+      spiral.addBinding(params, 'pitchMm', range('pitchMm', t('pitch', lang))).on('change', changed),
+      'pitch',
+    );
     withHelp(
       spiral
         .addBinding(params, 'thetaRefDeg', range('thetaRefDeg', t('thetaRef', lang)))
@@ -332,7 +341,8 @@ export function createPanel(
       dates.start = isoDay(params.windowStartUtc);
       dates.end = isoDay(params.windowEndUtc);
       if (turnsBinding) turnsBinding.disabled = params.clockMode !== 'linear';
-      if (outerRadiusBinding) outerRadiusBinding.disabled = !isSpiral(params.clockMode);
+      if (outerRadiusBinding) outerRadiusBinding.disabled = !growsOutward(params.clockMode);
+      if (pitchBinding) pitchBinding.disabled = !revolved(params.clockMode);
       pane?.refresh();
     },
     dispose: () => {

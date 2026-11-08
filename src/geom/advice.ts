@@ -19,7 +19,7 @@
  */
 
 import { M2_PERIOD_HOURS } from './validate.js';
-import { isSpiral, type Params } from './params.js';
+import { growsOutward, revolved, type Params } from './params.js';
 
 /** Arc length of a spiral of `turns` turns between two radii, mm. */
 export function approximateLength(r0: number, r1: number, turns: number): number {
@@ -74,7 +74,10 @@ export interface TurnGuidance {
    * r₀ for a ring, since the ring has no r₁.
    */
   maxOuterRadiusMm: number;
-  /** Ring radius that would make the circumference long enough, mm. */
+  /**
+   * Constant radius that would make the wall long enough, mm. One turn of it
+   * for a ring, `turns` of it for a cylinder.
+   */
   requiredRingRadiusMm: number;
   /** Centerline length the minimum-feature check needs, mm. */
   requiredLengthMm: number;
@@ -87,7 +90,7 @@ export interface TurnGuidance {
 export function turnGuidance(params: Params, turns: number, hours: number): TurnGuidance {
   const pitch = params.wallThickness + params.clearanceMm;
   // A ring has no radial span to share out; the turn bracket does not apply.
-  const radialSpan = isSpiral(params.clockMode) ? params.r1 - params.r0 : 0;
+  const radialSpan = growsOutward(params.clockMode) ? params.r1 - params.r0 : 0;
 
   // One M2 cycle must be at least minFeature wide:
   //   length · M2 / hours ≥ minFeature   ⇒   length ≥ minFeature · hours / M2
@@ -103,11 +106,69 @@ export function turnGuidance(params: Params, turns: number, hours: number): Turn
     radialSpanMm: radialSpan,
     requiredSpanMm: Math.abs(turns) * pitch,
     suggestedR1Mm: params.r0 + Math.abs(turns) * pitch,
+    // The coiled forms measure the radius to the CENTERLINE, so half a wall
+    // thickness still has to fit outside it. The revolved form's radius is
+    // already the outer surface — its wall goes inward — so nothing is held back.
     maxOuterRadiusMm:
-      (params.kilnLimitMm * (1 - params.shrinkagePct / 100)) / 2 - params.wallThickness / 2,
-    requiredRingRadiusMm: requiredLength / (2 * Math.PI),
+      (params.kilnLimitMm * (1 - params.shrinkagePct / 100)) / 2 -
+      (revolved(params.clockMode) ? 0 : params.wallThickness / 2),
+    requiredRingRadiusMm: requiredLength / (2 * Math.PI * Math.max(Math.abs(turns), 1e-9)),
     requiredLengthMm: requiredLength,
   };
+}
+
+/**
+ * Tallest pitch the kiln will take, mm per turn.
+ *
+ * The revolved form's height is turns x pitch, and the kiln has to swallow the
+ * GREEN piece, so the fired height may be no more than the limit times
+ * (1 - shrinkage).
+ */
+export function maxPitchForKiln(params: Params, turns: number): number {
+  const firedLimit = params.kilnLimitMm * (1 - params.shrinkagePct / 100);
+  return firedLimit / Math.max(Math.abs(turns), 1e-9);
+}
+
+/**
+ * Pitch that stretches the profile to a target length, mm per turn.
+ *
+ * The revolved profile's length IS the piece's height, which is turns x pitch,
+ * so this is a division rather than an integral.
+ */
+export function pitchForProfileLength(targetLengthMm: number, turns: number): number {
+  return targetLengthMm / Math.max(Math.abs(turns), 1e-9);
+}
+
+/**
+ * Pitch that brings the revolved silhouette down to a target slope, mm/turn.
+ *
+ * Stretching the height by a factor a leaves R alone and divides dR/dz by a, so
+ * the slope is exactly inversely proportional to the pitch and this is a plain
+ * ratio — no bound, no approximation. The same stretch is what makes the piece
+ * taller, which is why the kiln is what finally stops it.
+ */
+export function pitchForSlope(
+  currentPitchMm: number,
+  currentSlope: number,
+  targetSlope: number,
+): number {
+  if (targetSlope <= 0 || currentSlope <= 0) return currentPitchMm;
+  return (currentPitchMm * currentSlope) / targetSlope;
+}
+
+/**
+ * Gain k that brings the revolved silhouette down to a target slope, mm per cm.
+ *
+ * The same relation the other way round: R is proportional to k, so dR/dz is
+ * too, and the gain scales directly with the slope allowed.
+ */
+export function gainForSlope(
+  currentK: number,
+  currentSlope: number,
+  targetSlope: number,
+): number {
+  if (currentSlope <= 0) return currentK;
+  return (currentK * targetSlope) / currentSlope;
 }
 
 /** Radii scaled by this factor give the target centerline length. */

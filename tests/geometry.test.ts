@@ -16,7 +16,14 @@ import {
 } from '../src/geom/params.js';
 import { buildSpiral, radiusAt } from '../src/geom/spiral.js';
 import { notchDepth, NOTCH_EDGE_EPSILON } from '../src/geom/notches.js';
-import { buildBaseDisc, buildWall, buildWallMesh, lowPassAlongArc } from '../src/geom/wall.js';
+import {
+  buildBaseDisc,
+  buildNotchOverlay,
+  buildWall,
+  buildWallMesh,
+  lowPassAlongArc,
+  revolveSegments,
+} from '../src/geom/wall.js';
 import { checkManifold, checkNotchCoverage, measure, runChecks } from '../src/geom/validate.js';
 
 const dataDir = resolve(import.meta.dirname, '../public/data');
@@ -25,9 +32,10 @@ const events = JSON.parse(readFileSync(resolve(dataDir, 'events.json'), 'utf8'))
 
 /**
  * The baseline for the spiral tests below: the brief's 97-day window at the
- * radii it was sized for. The app's own default is a twelve-day ring sized for
- * the crown of a vase, so these cases pin their own window and radii rather
- * than inheriting whatever the default happens to be.
+ * radii and the gain it was sized for. The app's own default is a revolved
+ * vessel whose numbers are chosen for a radial tide, so these cases pin their
+ * own window, radii and height rather than inheriting whatever the default
+ * happens to be.
  */
 const params: Params = {
   ...DEFAULT_PARAMS,
@@ -35,6 +43,8 @@ const params: Params = {
   clockMode: 'synodic',
   r0: 30,
   r1: 140,
+  hBase: 15,
+  k: 0.25,
 };
 
 describe('built data', () => {
@@ -370,10 +380,10 @@ describe('vase window preset', () => {
     expect(checkNotchCoverage(wall, events).complete).toBe(true);
   });
 
-  it('covers about four-tenths of a turn in synodic mode', () => {
+  it('covers about a quarter of a turn in synodic mode', () => {
     const wall = buildWall(series, events, short);
-    expect(wall.spiral.turns).toBeGreaterThan(0.3);
-    expect(wall.spiral.turns).toBeLessThan(0.5);
+    expect(wall.spiral.turns).toBeGreaterThan(0.2);
+    expect(wall.spiral.turns).toBeLessThan(0.3);
   });
 
   it('still builds a watertight mesh', () => {
@@ -406,11 +416,8 @@ describe('parameters', () => {
 
 
 describe('circle mode', () => {
-  const circle: Params = { ...DEFAULT_PARAMS };
-
-  it('is what the site opens on', () => {
-    expect(DEFAULT_PARAMS.clockMode).toBe('circle');
-  });
+  // The site opens on the revolved form now, so the ring pins its own mode.
+  const circle: Params = { ...DEFAULT_PARAMS, clockMode: 'circle' };
 
   it('closes the centerline into a ring', () => {
     const wall = buildWall(series, events, circle);
@@ -514,8 +521,214 @@ describe('circle mode', () => {
     expect(spiralChecks.map((check) => check.id)).toContain('turnSpacing');
   });
 
-  it('fails nothing at the defaults the site ships', () => {
+  it('fails nothing at the shipped numbers', () => {
     const { checks } = runChecks(buildWall(series, events, circle), circle);
     expect(checks.filter((check) => check.level === 'fail').map((c) => c.id)).toEqual([]);
+  });
+});
+
+
+describe('cylinder mode: the revolved form', () => {
+  const cylinder: Params = { ...DEFAULT_PARAMS };
+
+  it('is what the site opens on', () => {
+    expect(DEFAULT_PARAMS.clockMode).toBe('cylinder');
+  });
+
+  it('runs time up the axis, so arc length IS height', () => {
+    const wall = buildWall(series, events, cylinder);
+    expect(wall.clock.revolved).toBe(true);
+    expect(wall.spiral.closed).toBe(false);
+    for (const sample of wall.spiral.samples) {
+      expect(sample.z).toBeCloseTo(sample.s, 9);
+      // The path is the axis: the station's own radius never moves off r₀.
+      expect(sample.r).toBeCloseTo(cylinder.r0, 9);
+      // And it has no direction in plan at all.
+      expect(Math.hypot(sample.tx, sample.ty)).toBe(0);
+    }
+    // Which makes the piece exactly as tall as the profile is long.
+    expect(wall.totalHeightMm).toBeCloseTo(wall.spiral.length, 9);
+    expect(wall.spiral.length).toBeCloseTo(cylinder.pitchMm * wall.clock.turns, 6);
+  });
+
+  it('puts the tide out of the circumference, not up the top', () => {
+    const wall = buildWall(series, events, cylinder);
+    const mesh = buildWallMesh(wall, cylinder);
+    const crest = Math.max(...wall.undisturbed);
+
+    let lowest = Number.POSITIVE_INFINITY;
+    let highest = Number.NEGATIVE_INFINITY;
+    let widest = 0;
+    for (let v = 0; v < mesh.positions.length; v += 3) {
+      const radius = Math.hypot(mesh.positions[v], mesh.positions[v + 2]);
+      const height = mesh.positions[v + 1];
+      if (height < lowest) lowest = height;
+      if (height > highest) highest = height;
+      if (radius > widest) widest = radius;
+    }
+    // The height is the record's own length, and nothing stands on top of it.
+    expect(lowest).toBeCloseTo(0, 6);
+    expect(highest).toBeCloseTo(wall.spiral.length, 1);
+    // The width is r₀ plus the tide, which is where the tide now lives.
+    expect(widest).toBeCloseTo(cylinder.r0 + crest, 1);
+  });
+
+  it('is the same shape on every side: a surface of revolution', () => {
+    const wall = buildWall(series, events, cylinder);
+    const mesh = buildWallMesh(wall, cylinder);
+    const segments = revolveSegments(wall.spiral.samples.length);
+    // Vertices are written station by station, two per segment, so one station
+    // is one contiguous ring of the buffer.
+    for (const station of [0, 97, 311, wall.spiral.samples.length - 1]) {
+      const base = station * segments * 2;
+      const first = base * 3;
+      const outerRadius = Math.hypot(mesh.positions[first], mesh.positions[first + 2]);
+      const height = mesh.positions[first + 1];
+      for (let k = 0; k < segments; k += 1) {
+        const at = (base + k * 2) * 3;
+        expect(Math.hypot(mesh.positions[at], mesh.positions[at + 2])).toBeCloseTo(outerRadius, 4);
+        expect(mesh.positions[at + 1]).toBeCloseTo(height, 6);
+      }
+      expect(outerRadius).toBeCloseTo(cylinder.r0 + wall.top[station], 4);
+    }
+  });
+
+  it('erodes the bore rather than offsetting it, so it can never fold', () => {
+    // A pitch this low squashes the profile into a fan of discs: a constant
+    // offset inward would turn itself inside out, and an erosion cannot.
+    for (const patch of [{}, { pitchMm: 60 }, { k: 0.4 }, { wallThickness: 14 }]) {
+      const settings = { ...cylinder, ...patch };
+      const wall = buildWall(series, events, settings);
+      const bore = wall.bore!;
+      expect(bore).not.toBeNull();
+      for (let i = 0; i < bore.length; i += 1) {
+        const outer = settings.r0 + wall.top[i];
+        // Never thinner than the wall asked for, never through the axis, and
+        // never outside the surface it is eroded from.
+        expect(outer - bore[i]).toBeGreaterThanOrEqual(settings.wallThickness - 1e-9);
+        expect(bore[i]).toBeGreaterThan(0);
+        expect(bore[i]).toBeLessThan(outer);
+      }
+      // And the clay it leaves stays inside the bound the slope implies.
+      const { maxClayMm, maxSlope } = wall.profile!;
+      expect(maxClayMm).toBeGreaterThanOrEqual(settings.wallThickness - 1e-9);
+      expect(maxClayMm).toBeLessThanOrEqual(
+        settings.wallThickness * Math.sqrt(1 + maxSlope * maxSlope) + 1e-6,
+      );
+    }
+  });
+
+  it('is watertight: a sleeve, so a torus like the ring', () => {
+    const report = checkManifold(buildWallMesh(buildWall(series, events, cylinder), cylinder));
+    expect(report.watertight).toBe(true);
+    expect(report.boundaryEdges).toBe(0);
+    expect(report.nonManifoldEdges).toBe(0);
+    expect(report.eulerCharacteristic).toBe(0);
+    expect(report.volumeMm3).toBeGreaterThan(0);
+  });
+
+  it('takes its diameter from the crest, not from r₀ alone', () => {
+    const wall = buildWall(series, events, cylinder);
+    const m = measure(wall, cylinder);
+    const crest = Math.max(...wall.undisturbed);
+    expect(wall.outerRadiusMm).toBeCloseTo(cylinder.r0 + crest, 9);
+    expect(m.firedOuterDiameterMm).toBeCloseTo(2 * (cylinder.r0 + crest), 9);
+    // Widening r₁ cannot change it any more than it changes a ring.
+    const widened = buildWall(series, events, { ...cylinder, r1: 399 });
+    expect(widened.spiral.length).toBeCloseTo(wall.spiral.length, 9);
+  });
+
+  it('scales the slope exactly inversely with the pitch', () => {
+    const base = buildWall(series, events, cylinder).profile!;
+    const doubled = buildWall(series, events, { ...cylinder, pitchMm: cylinder.pitchMm * 2 })
+      .profile!;
+    expect(doubled.maxSlope).toBeCloseTo(base.maxSlope / 2, 6);
+    expect(doubled.mmPerHour).toBeCloseTo(base.mmPerHour * 2, 6);
+    // And directly with k, which is the other half of the advice's arithmetic.
+    const halved = buildWall(series, events, { ...cylinder, k: cylinder.k / 2 }).profile!;
+    expect(halved.maxSlope).toBeCloseTo(base.maxSlope / 2, 6);
+  });
+
+  it('checks the profile slope and the piece height, not the coil', () => {
+    const ids = runChecks(buildWall(series, events, cylinder), cylinder).checks.map((c) => c.id);
+    expect(ids).toContain('profile');
+    expect(ids).toContain('pieceHeight');
+    expect(ids).not.toContain('turnSpacing');
+    expect(ids).not.toContain('wallLength');
+
+    const flat = { ...cylinder, clockMode: 'synodic' as const, r0: 30, r1: 140 };
+    const flatIds = runChecks(buildWall(series, events, flat), flat).checks.map((c) => c.id);
+    expect(flatIds).toContain('turnSpacing');
+    expect(flatIds).toContain('wallLength');
+    expect(flatIds).not.toContain('profile');
+    expect(flatIds).not.toContain('pieceHeight');
+  });
+
+  it('fails the slope check when the profile is squashed, and the fix clears it', () => {
+    const squashed = { ...cylinder, pitchMm: 200 };
+    const check = runChecks(buildWall(series, events, squashed), squashed).checks.find(
+      (c) => c.id === 'profile',
+    )!;
+    expect(check.level).toBe('fail');
+    expect(check.fix!.patch).toHaveProperty('pitchMm');
+    const fixed = { ...squashed, ...check.fix!.patch };
+    expect(
+      runChecks(buildWall(series, events, fixed), fixed).checks.find((c) => c.id === 'profile')!
+        .level,
+    ).toBe('ok');
+  });
+
+  it('shortens the window, not the pitch, when the piece will not fit the kiln', () => {
+    const tall = { ...cylinder, ...FULL_WINDOW_PRESET };
+    const check = runChecks(buildWall(series, events, tall), tall).checks.find(
+      (c) => c.id === 'pieceHeight',
+    )!;
+    expect(check.level).toBe('fail');
+    expect(check.fix!.patch).toHaveProperty('windowEndUtc');
+    // Shortening the window leaves the tide's own shape essentially untouched,
+    // which is the whole reason it is the lever offered. Essentially, not
+    // exactly: the piece rises with the Moon's phase rather than with the
+    // clock, so a different stretch of the orbit is a few per cent faster or
+    // slower. That is the slack the fix keeps in hand.
+    const fixed = { ...tall, ...check.fix!.patch };
+    const before = buildWall(series, events, tall).profile!;
+    const after = buildWall(series, events, fixed).profile!;
+    expect(after.mmPerHour / before.mmPerHour).toBeGreaterThan(0.85);
+    expect(after.mmPerHour / before.mmPerHour).toBeLessThan(1.15);
+    expect(
+      runChecks(buildWall(series, events, fixed), fixed).checks.find((c) => c.id === 'pieceHeight')!
+        .level,
+    ).toBe('ok');
+  });
+
+  it('cuts each eruption as a ring round the whole piece', () => {
+    const wall = buildWall(series, events, cylinder);
+    expect(wall.notches.map((notch) => notch.eventId)).toEqual(['e2', 'e3']);
+    const overlay = buildNotchOverlay(wall, cylinder);
+    expect(overlay.indices.length).toBeGreaterThan(0);
+    // The cut is axisymmetric, so the overlay has to reach every quadrant.
+    const quadrants = new Set<number>();
+    for (let v = 0; v < overlay.positions.length; v += 3) {
+      const angle = Math.atan2(-overlay.positions[v + 2], overlay.positions[v]);
+      quadrants.add(Math.floor(((angle + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 2)));
+    }
+    expect(quadrants.size).toBe(4);
+  });
+
+  it('fails nothing at the defaults the site ships', () => {
+    const { checks } = runChecks(buildWall(series, events, cylinder), cylinder);
+    expect(checks.filter((check) => check.level === 'fail').map((c) => c.id)).toEqual([]);
+  });
+
+  it('leaves the other modes flat on the ground', () => {
+    for (const mode of ['circle', 'synodic', 'springNeap', 'linear'] as const) {
+      const wall = buildWall(series, events, { ...cylinder, clockMode: mode, r0: 30, r1: 140 });
+      expect(wall.clock.revolved).toBe(false);
+      expect(wall.clock.climbMmPerTurn).toBe(0);
+      expect(wall.profile).toBeNull();
+      expect(wall.bore).toBeNull();
+      expect(Math.max(...wall.spiral.samples.map((sample) => sample.z))).toBe(0);
+      expect(wall.totalHeightMm).toBeCloseTo(Math.max(...wall.undisturbed), 9);
+    }
   });
 });

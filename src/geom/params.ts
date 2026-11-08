@@ -9,11 +9,32 @@
 
 import type { SignalName } from '../data/series.js';
 
-export type ClockMode = 'circle' | 'synodic' | 'springNeap' | 'linear';
+export type ClockMode = 'circle' | 'cylinder' | 'synodic' | 'springNeap' | 'linear';
 
-/** True for the modes that wind outward; false for the closed ring. */
-export function isSpiral(mode: ClockMode): boolean {
-  return mode !== 'circle';
+/**
+ * True for the modes whose radius grows with the angle, so the turns are spread
+ * out across a flat plan. False for the two constant-radius forms — the closed
+ * ring and the cylinder — where every turn has the same diameter and r₁ has
+ * nothing to do.
+ */
+export function growsOutward(mode: ClockMode): boolean {
+  return mode === 'synodic' || mode === 'springNeap' || mode === 'linear';
+}
+
+/** @deprecated use {@link growsOutward}; kept so older call sites still read. */
+export const isSpiral = growsOutward;
+
+/**
+ * True for the revolved form: the cylinder.
+ *
+ * It is the one mode that is not a coil at all. Time runs UP the axis and the
+ * signal becomes the RADIUS, so the piece is a surface of revolution — a thrown
+ * vessel whose silhouette is the tide. Every tide crest is therefore a full
+ * circle of its own diameter around the piece, the same on every side, which is
+ * what a profile pulled against a turning wheel makes.
+ */
+export function revolved(mode: ClockMode): boolean {
+  return mode === 'cylinder';
 }
 export type PageSize = 'A4' | 'A3' | 'Letter';
 
@@ -38,6 +59,13 @@ export interface Params {
   r1: number;
   /** Plan rotation in degrees; the default points new moon at the viewer. */
   thetaRefDeg: number;
+  /**
+   * Cylinder mode only: how far the piece rises per turn — per synodic month —
+   * in mm. It is the vertical scale of the whole form: the height is the turns
+   * times this, and it is what decides how much room each tide gets up the
+   * profile, so it plays the part the radius plays on a flat spiral.
+   */
+  pitchMm: number;
   /** Arc-length resampling step. */
   arcStepMm: number;
 
@@ -84,39 +112,58 @@ export interface Params {
 }
 
 /**
- * The defaults make the crown of a vase: a closed ring sized to sit on a thrown
- * rim, carrying the twelve days around Pichincha's two subplinian eruptions.
+ * The defaults make a vessel: a revolved form whose silhouette is the tide of
+ * 4-10 October 1999, carrying both of Pichincha's subplinian eruptions as
+ * incised rings.
  *
- * The window is the binding constraint. One tidal cycle occupies
- * circumference x 12.42 / window hours of arc, and the circumference is fixed by
- * the vase, so a long window packs the tide into teeth too fine to cut, dry or
- * fire. At r0 = 100 mm and twelve days each tooth is about 13 mm wide at green
- * size with a 3.2 : 1 height-to-width ratio — carvable by hand in a grogged or
- * paper body. The whole of 1-12 October 1999 is observed data: not one hour of
- * it is reconstructed.
+ * Fired it stands 324 mm tall and swings between 184 mm across at the low
+ * waters and 237 mm at the high ones, which is 270 x 368 mm green — inside a
+ * 400 mm kiln in both directions with room to spare. Each tidal cycle gets
+ * 24 mm of height and 26 mm of relief, so the record reads as about thirteen
+ * swells up the piece.
+ *
+ * The WINDOW is the binding constraint, and it binds the other way round from
+ * the ring. On a ring the tide has to fit around a fixed circumference, so a
+ * long window packs it into teeth too fine to cut. Here the tide has to fit UP
+ * a height the kiln limits, and the profile's slope is what gives out: the
+ * silhouette's steepest pitch is 1.65 : 1 at these numbers, and a slope much
+ * past 2 : 1 is an undercut no rib will follow. Seven days is about as much as
+ * a 400 mm kiln will carry at a relief worth looking at; the twelve-day crown
+ * window would need k down near 0.05, which is a 5 mm ripple on a 300 mm pot.
+ *
+ * Every hour of 4-10 October is observed data: not one of them is reconstructed.
+ * The numbers also leave every other clock mode green, so changing mode is a
+ * change of form rather than a wall of red.
  */
 export const DEFAULT_PARAMS: Params = {
-  clockMode: 'circle',
+  clockMode: 'cylinder',
   linearTurns: 1,
-  // 1-12 Oct 1999: the 5 Oct and 7 Oct subplinian eruptions, clear of the
-  // 13 Oct data gap at both ends.
-  windowStartUtc: '1999-10-01T00:00:00.000Z',
-  windowEndUtc: '1999-10-12T23:00:00.000Z',
+  // 4-10 Oct 1999: the 5 Oct and 7 Oct subplinian eruptions with two days of
+  // margin at each end, well clear of the 13 Oct data gap.
+  windowStartUtc: '1999-10-04T00:00:00.000Z',
+  windowEndUtc: '1999-10-10T23:00:00.000Z',
 
-  // r0 is the ring's radius: 206 mm fired, 234 mm green — a generous but
-  // throwable vase mouth. r1 is unused in circle mode and is set so that the
-  // spiral modes also work at this window rather than failing the moment the
-  // mode is changed.
-  r0: 100,
+  // r0 is the core radius the tide is measured out from: the waist of the
+  // vessel, 92 mm fired at the lowest water. r1 is unused wherever the radius
+  // is constant and is set so the spiral modes also work at this window rather
+  // than failing the moment the mode is changed.
+  r0: 90,
   r1: 170,
   // Plan y points away from the default camera, so -90 deg puts phase 0
-  // (new moon) toward the viewer.
+  // (new moon) toward the viewer — and, on the revolved form, puts the
+  // reported meridian there too.
   thetaRefDeg: -90,
+  // 1400 mm per synodic month is 1.94 mm of height per hour: the vertical
+  // scale of the whole piece, and the only thing that sets how much room each
+  // tide gets up the profile.
+  pitchMm: 1400,
   arcStepMm: 0.5,
 
   signal: 'elev',
-  hBase: 15,
-  k: 0.25,
+  hBase: 16,
+  // 0.08 mm per cm turns the 157 cm range of this week into 26 mm of relief,
+  // at a silhouette slope of 1.65 : 1 — a steep flute a rib can still follow.
+  k: 0.08,
   smoothingMm: 0,
   wallThickness: 6,
 
@@ -152,6 +199,7 @@ export const PARAM_RANGES = {
   r0: { min: 5, max: 200, step: 1 },
   r1: { min: 20, max: 400, step: 1 },
   thetaRefDeg: { min: -180, max: 180, step: 1 },
+  pitchMm: { min: 10, max: 2000, step: 5 },
   arcStepMm: { min: 0.2, max: 3, step: 0.1 },
   hBase: { min: 2, max: 60, step: 0.5 },
   k: { min: 0.02, max: 1, step: 0.01 },
@@ -210,11 +258,10 @@ export function snapDown(key: RangedParam, value: number): number {
   return Number(clampToRange(key, snapped).toFixed(decimalsOf(step)));
 }
 
-/** A short window around the two October eruptions, offered as a preset. */
 /** The window the piece is designed around: the two October eruptions. */
 export const SHORT_WINDOW_PRESET: Partial<Params> = {
-  windowStartUtc: '1999-10-01T00:00:00.000Z',
-  windowEndUtc: '1999-10-12T23:00:00.000Z',
+  windowStartUtc: '1999-10-04T00:00:00.000Z',
+  windowEndUtc: '1999-10-10T23:00:00.000Z',
 };
 
 /** The whole record the brief covers, for seeing all five eruptions at once. */
@@ -224,16 +271,20 @@ export const FULL_WINDOW_PRESET: Partial<Params> = {
 };
 
 /**
- * The radius of the outermost wall, which is what the kiln has to take: the ring
- * radius in circle mode, the end of the spiral otherwise.
+ * The radius the plan is set out from: the ring radius in circle mode, the core
+ * radius of the revolved form, the end of the spiral otherwise.
+ *
+ * On the revolved form this is NOT the widest point of the piece — the tide is
+ * radial there, so the outer surface stands `relief` proud of it. What the kiln
+ * has to take is `Wall.outerRadiusMm`, which knows the relief.
  */
 export function outerRadius(params: Params): number {
-  return isSpiral(params.clockMode) ? params.r1 : params.r0;
+  return growsOutward(params.clockMode) ? params.r1 : params.r0;
 }
 
 /** The parameter that `outerRadius` reads, for advice that wants to change it. */
 export function outerRadiusKey(params: Params): 'r0' | 'r1' {
-  return isSpiral(params.clockMode) ? 'r1' : 'r0';
+  return growsOutward(params.clockMode) ? 'r1' : 'r0';
 }
 
 /** Shrinkage factor: green size = fired size / (1 - shrinkage). */
@@ -260,7 +311,7 @@ export function configHash(params: Params): string {
 }
 
 const NUMERIC_KEYS: Array<keyof Params> = [
-  'linearTurns', 'r0', 'r1', 'thetaRefDeg', 'arcStepMm', 'hBase', 'k', 'smoothingMm',
+  'linearTurns', 'r0', 'r1', 'thetaRefDeg', 'pitchMm', 'arcStepMm', 'hBase', 'k', 'smoothingMm',
   'wallThickness', 'notchWidth', 'notchDepth0', 'notchDepthPerKm', 'shrinkagePct',
   'kilnLimitMm', 'clearanceMm', 'minFeatureMm', 'maxHeightMm', 'stripMaxMm',
 ];

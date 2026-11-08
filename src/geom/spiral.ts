@@ -30,10 +30,17 @@ export interface SpiralSample {
   /** Plan position, mm. */
   x: number;
   y: number;
-  /** Unit normal in plan, pointing outward (away from the origin side). */
+  /**
+   * Unit normal in plan, pointing outward (away from the origin side). On the
+   * revolved form it is the meridian's radial direction, which is the direction
+   * the tide itself comes out in.
+   */
   nx: number;
   ny: number;
-  /** Unit tangent in plan. */
+  /**
+   * Unit tangent in plan. Zero on the revolved form, whose path runs straight
+   * up the axis and so has no direction in plan at all.
+   */
   tx: number;
   ty: number;
   /** Fractional hour index into the series. */
@@ -42,6 +49,13 @@ export interface SpiralSample {
   theta: number;
   /** Radius at this station, mm. */
   r: number;
+  /**
+   * Height of this station above the base, mm. Zero everywhere except in
+   * cylinder mode, the revolved form, where time runs up the axis: there it is
+   * the station's own height, and equals the arc length `s`, because the path
+   * IS the axis.
+   */
+  z: number;
 }
 
 export interface Spiral {
@@ -51,7 +65,10 @@ export interface Spiral {
    * no ends: the mesh wraps instead of being capped, and arc length is modular.
    */
   closed: boolean;
-  /** Total centerline length, mm. */
+  /**
+   * Total centerline length, mm. On the revolved form the centerline is the
+   * axis, so this is the height of the piece.
+   */
   length: number;
   /** Radial distance between consecutive turns, mm. */
   turnSpacing: number;
@@ -64,11 +81,21 @@ export interface Spiral {
 }
 
 /**
- * r(theta), linear in the unwrapped angle — except in circle mode, where the
- * radius is constant at r0 and the wall closes on itself.
+ * Height at an angle, mm. Only the revolved form climbs: there the angle is the
+ * unwrapped moon phase, so one turn — one synodic month — is one fixed slice of
+ * the axis, and the piece's height is `turns` x pitch.
+ */
+export function baseHeightAt(theta: number, clock: Clock): number {
+  if (clock.climbMmPerTurn === 0) return 0;
+  return ((theta - clock.thetaStart) / (2 * Math.PI)) * clock.climbMmPerTurn;
+}
+
+/**
+ * r(theta), linear in the unwrapped angle — except in the constant-radius
+ * modes, the ring and the cylinder, where it stays at r0.
  */
 export function radiusAt(theta: number, clock: Clock, params: Params): number {
-  if (clock.closed) return params.r0;
+  if (clock.constantRadius) return params.r0;
   const span = clock.thetaEnd - clock.thetaStart;
   if (span === 0) return params.r0;
   const u = (theta - clock.thetaStart) / span;
@@ -117,6 +144,98 @@ function catmullRom(
   return lerp(b1, b2, t1, t2, tt);
 }
 
+
+/**
+ * The revolved centerline: straight up the axis.
+ *
+ * There is no spline and no plan walk here, because the path is a line. Time
+ * sets the HEIGHT of a station and the signal — layered on in `wall.ts` — sets
+ * its RADIUS, so the piece is a surface of revolution and the tide comes out of
+ * the circumference instead of out of the top. Arc length up this path is
+ * therefore plain height in mm, which is what makes a notch width and a
+ * smoothing wavelength mean the same thing here as on a coil.
+ */
+function buildProfile(clock: Clock, params: Params, extraArcPositions: number[]): Spiral {
+  const { i0, i1 } = clock.window;
+
+  // Height at every whole hour. Monotone, because the Moon's phase is, so it
+  // inverts by bisection: an arc length can always be put back on the clock.
+  const zAtHour = new Float64Array(i1 - i0 + 1);
+  for (let hour = i0; hour <= i1; hour += 1) {
+    zAtHour[hour - i0] = baseHeightAt(clock.thetaAt(hour), clock);
+  }
+  const length = Math.max(zAtHour[zAtHour.length - 1], 1e-6);
+
+  const hourAtHeight = (z: number): number => {
+    if (z <= 0) return i0;
+    if (z >= length) return i1;
+    let low = 0;
+    let high = zAtHour.length - 1;
+    while (high - low > 1) {
+      const mid = (low + high) >> 1;
+      if (zAtHour[mid] <= z) low = mid;
+      else high = mid;
+    }
+    const span = zAtHour[high] - zAtHour[low];
+    const frac = span > 1e-12 ? (z - zAtHour[low]) / span : 0;
+    return i0 + low + frac;
+  };
+
+  // Stations: the fixed grid up the axis, every notch edge, and the rim.
+  const positions: number[] = [];
+  const step = Math.max(params.arcStepMm, 0.05);
+  for (let s = 0; s < length; s += step) positions.push(s);
+  positions.push(length);
+  for (const s of extraArcPositions) {
+    if (s > 0 && s < length) positions.push(s);
+  }
+  positions.sort((a, b) => a - b);
+  const MIN_SEPARATION = 1e-3;
+  const unique: number[] = [];
+  for (const s of positions) {
+    if (unique.length === 0 || s - unique[unique.length - 1] > MIN_SEPARATION) unique.push(s);
+  }
+
+  // The meridian the profile is reported on. Nothing about the solid depends on
+  // it — the piece is the same on every side — but the cursor, the notch labels
+  // and the rib template all need one ray to live on, and theta_ref is the ray
+  // the plan is already set out from.
+  const refRad = params.thetaRefDeg * (Math.PI / 180);
+  const nx = Math.cos(refRad);
+  const ny = Math.sin(refRad);
+
+  const stationAt = (s: number): SpiralSample => {
+    const hourIndex = hourAtHeight(s);
+    return {
+      s,
+      x: params.r0 * nx,
+      y: params.r0 * ny,
+      nx,
+      ny,
+      tx: 0,
+      ty: 0,
+      hourIndex,
+      theta: clock.thetaAt(hourIndex),
+      r: params.r0,
+      z: s,
+    };
+  };
+
+  const clamp = (s: number) => Math.min(Math.max(s, 0), length);
+
+  return {
+    samples: unique.map(stationAt),
+    closed: false,
+    length,
+    // Nothing is spaced radially from anything: the turns are slices of the axis.
+    turnSpacing: Number.POSITIVE_INFINITY,
+    turns: clock.turns,
+    arcLengthAtHour: (hourIndex) =>
+      clamp(baseHeightAt(clock.thetaAt(Math.min(Math.max(hourIndex, i0), i1)), clock)),
+    sampleAtArcLength: (s) => stationAt(clamp(s)),
+  };
+}
+
 /**
  * Build the centerline.
  *
@@ -129,6 +248,9 @@ export function buildSpiral(
   params: Params,
   extraArcPositions: number[] = [],
 ): Spiral {
+  // The revolved form's path is the axis, not a curve in plan.
+  if (clock.revolved) return buildProfile(clock, params, extraArcPositions);
+
   const { i0, i1 } = clock.window;
 
   // 1. Hourly control points.
@@ -255,16 +377,17 @@ export function buildSpiral(
       hourIndex: point.hourIndex,
       theta,
       r: radius,
+      z: baseHeightAt(theta, clock),
     };
   });
 
   const turns = clock.turns;
-  // A ring has one turn and no neighbour to be spaced from.
-  const turnSpacing = closed
-    ? Number.POSITIVE_INFINITY
-    : turns > 0
-      ? (params.r1 - params.r0) / turns
-      : Number.POSITIVE_INFINITY;
+  // A ring has one turn and no neighbour to be spaced from; a cylinder's turns
+  // are spaced up the axis, which `pitchMm` governs instead.
+  const turnSpacing =
+    clock.constantRadius || turns <= 0
+      ? Number.POSITIVE_INFINITY
+      : (params.r1 - params.r0) / turns;
 
   // Arc length as a function of hour index, for placing events.
   const arcLengthAtHour = (hourIndex: number): number => {
@@ -315,6 +438,7 @@ export function buildSpiral(
       hourIndex: mix(a.hourIndex, b.hourIndex),
       theta: mix(a.theta, b.theta),
       r: mix(a.r, b.r),
+      z: mix(a.z, b.z),
     };
   };
 
